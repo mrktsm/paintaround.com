@@ -518,7 +518,10 @@ export class WebGLDrawingRenderer {
 
         const gl = this.canvas.getContext('webgl2', {
             alpha: true,
-            premultipliedAlpha: false,
+            // Everything is blended premultiplied (ONE, ONE_MINUS_SRC_ALPHA), so the canvas must be
+            // composited as premultiplied too — with false, the page multiplied colour by alpha a
+            // second time and every semi-transparent pixel (pencil grain, soft edges) went grey.
+            premultipliedAlpha: true,
             antialias: true,
         });
 
@@ -801,7 +804,7 @@ export class WebGLDrawingRenderer {
         gl.uniform2f(this.lineResolutionLoc, this.canvas.width, this.canvas.height);
 
         gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // straight colour in, premultiplied out
 
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, segments.length);
 
@@ -835,7 +838,7 @@ export class WebGLDrawingRenderer {
         gl.uniform2f(this.circleResolutionLoc, this.canvas.width, this.canvas.height);
 
         gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // straight colour in, premultiplied out
 
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, circles.length);
 

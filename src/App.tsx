@@ -1376,16 +1376,33 @@ function App({ panorama }: { panorama: Panorama }) {
     let currentZoom = 0;
     let zoomInitialized = false;
     let fov = 90;
+    // One decision per gesture: a fast two-finger flick sends big whole-number steps that look
+    // like a mouse wheel, so judging every event alone made fast swipes zoom mid-pan. Once a
+    // gesture looks like a trackpad it stays a pan until the wheel events pause.
+    let gesture: 'trackpad' | 'wheel' | null = null;
+    let lastWheelAt = 0;
     const onWheel = (e: WheelEvent) => {
       if (!viewerRef.current) return;
       e.preventDefault();
       const viewer = viewerRef.current;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const svc = (viewer as any)._navigator.stateService;
+      const now = performance.now();
+      if (now - lastWheelAt > 220) gesture = null;
+      lastWheelAt = now;
       // Trackpad scrolls are pixel-mode with small/fractional deltas or a horizontal component;
-      // mouse wheels send larger whole-number vertical steps. Pinch arrives as wheel + ctrlKey.
-      const isTrackpadScroll =
-        !e.ctrlKey && e.deltaMode === 0 && (e.deltaX !== 0 || !Number.isInteger(e.deltaY) || Math.abs(e.deltaY) < 40);
+      // Chrome/Safari also report trackpads with wheelDelta exactly -3x delta (a mouse notch is
+      // ±120). Mouse wheels send larger whole-number vertical steps. Pinch = wheel + ctrlKey.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const legacy = e as any;
+      const looksTrackpad = e.deltaMode === 0 && (
+        e.deltaX !== 0 || !Number.isInteger(e.deltaY) || Math.abs(e.deltaY) < 40 ||
+        (typeof legacy.wheelDeltaY === 'number' && legacy.wheelDeltaY !== 0 && legacy.wheelDeltaY === -3 * e.deltaY));
+      if (!e.ctrlKey) {
+        if (gesture === null) gesture = looksTrackpad ? 'trackpad' : 'wheel';
+        else if (gesture === 'wheel' && looksTrackpad) gesture = 'trackpad'; // a wheel never sends these
+      }
+      const isTrackpadScroll = !e.ctrlKey && gesture === 'trackpad';
       if (isTrackpadScroll) {
         // brush outline stays pinned to its spot in the scene while the camera turns
         viewer.getFieldOfView().then((f) => { fov = f; });

@@ -529,21 +529,25 @@
   align-items: center;
   text-align: center;
 }
-.ex-search-empty > svg { color: #8e8e93; margin-bottom: 14px; opacity: 0.8; }
+.ex-search-empty > svg { color: #c7c7cc; margin-bottom: 16px; } /* iOS systemGray3; solid so ring + handle don't darken where they overlap */
 .ex-search-empty h2 { margin: 0; font-size: 20px; font-weight: 600; line-height: 1.3; letter-spacing: -0.025em; }
 .ex-search-empty p { max-width: 230px; margin: 7px 0 0; color: var(--ex-text-2); font-size: 15px; line-height: 1.5; }
 .ex-search-recents { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .ex-search-recents h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.025em; }
 .ex-search-recents button { min-height: 36px; padding: 4px 0 4px 12px; color: var(--ex-blue); font-size: 14px; }
-.ex-search-results { flex: none; list-style: none; margin: 0; padding: 0 14px; border-radius: 18px; background: var(--ex-search-bg); }
+.ex-search-results { flex: none; list-style: none; margin: 0; padding: 0; overflow: hidden; border-radius: 18px; background: var(--ex-search-bg); }
 .ex-search-results li { position: relative; }
-.ex-search-results li + li::before { content: ''; position: absolute; top: 0; right: 0; left: 70px; height: 0.5px; background: rgba(0, 0, 0, 0.12); }
-.ex-search-result { display: flex; align-items: center; gap: 14px; width: calc(100% + 16px); min-height: 84px; margin: 0 -8px; padding: 12px 8px; text-align: left; border-radius: 12px; }
-.ex-search-result:hover { background: rgba(0, 0, 0, 0.05); }
+/* inset dividers from the text, like an inset grouped list */
+.ex-search-results li + li::before { content: ''; position: absolute; z-index: 1; top: 0; right: 14px; left: 84px; height: 0.5px; background: rgba(0, 0, 0, 0.12); }
+/* rows run edge to edge: the highlight fills the whole row and the group's rounded corners clip
+   it on the first/last row (Apple's lists), instead of a floating rounded card inside the list */
+.ex-search-result { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 84px; margin: 0; padding: 12px 14px; text-align: left; border-radius: 0; transition: background-color 0.12s ease; }
+.ex-search-result:hover { background: rgba(0, 0, 0, 0.04); }
+.ex-search-result:active { background: rgba(0, 0, 0, 0.08); transition: none; }
 /* the divider lines touching a highlighted row disappear, as in Apple's lists */
 .ex-search-results li:has(.ex-search-result:hover)::before,
 .ex-search-results li:has(.ex-search-result:hover) + li::before { opacity: 0; }
-.ex-search-result:focus-visible { outline: 2px solid var(--ex-blue); outline-offset: 3px; }
+.ex-search-result:focus-visible { outline: 2px solid var(--ex-blue); outline-offset: -2px; }
 .ex-search-result__preview { display: grid; place-items: center; flex: none; width: 56px; height: 56px; overflow: hidden; border-radius: 12px; background: #e9e9ed; color: var(--ex-text-2); }
 .ex-search-result__preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .ex-search-result__copy { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -610,9 +614,10 @@
 .ex--dark .ex-search-clear:hover { color: rgba(235, 235, 245, 0.7) !important; }
 .ex--dark .ex-search-clear path { stroke: #1c1c1e; }
 .ex--dark .ex-search-results li + li::before { background: rgba(255, 255, 255, 0.1); }
-.ex--dark .ex-search-result:hover { background: rgba(255, 255, 255, 0.05); }
+.ex--dark .ex-search-result:hover { background: rgba(255, 255, 255, 0.06); }
+.ex--dark .ex-search-result:active { background: rgba(255, 255, 255, 0.11); }
 .ex--dark .ex-search-result__preview { background: rgba(255, 255, 255, 0.08); }
-.ex--dark .ex-search-empty > svg { color: rgba(235, 235, 245, 0.35); }
+.ex--dark .ex-search-empty > svg { color: #636366; } /* systemGray2 (dark) */
 .ex--dark .ex-panel--search .ex-panel__head.is-scrolled { box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.1); }
 
 /* map controls */
@@ -703,7 +708,7 @@
 }
 .ex-sheet--full .ex-sheet__content { overflow-y: auto; }
 .ex-sheet__body { padding: 4px 16px calc(28px + env(safe-area-inset-bottom, 0px)); }
-.ex-sheet__body .ex-search-results { padding: 0 14px; }
+.ex-sheet__body .ex-search-results { padding: 0; }
 .ex-sheet__titlerow { display: flex; align-items: flex-start; justify-content: space-between; margin: 26px 0 12px; }
 .ex-sheet__titlerow--first { margin-top: 8px; }
 .ex-sheet__titlerow h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }

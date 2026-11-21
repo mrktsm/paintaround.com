@@ -1,0 +1,1802 @@
+{
+  "commons-40024840": {
+    "surface": "surface-c6ac6485ef59.f16",
+    "sourceSha256": "2b8079b37e3f41235c275bc5705496993817282877a16002291faa65ae9a49f8",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "commons-40026727": {
+    "surface": "surface-b00839989acb.f16",
+    "sourceSha256": "5c51ae73aa4a63c646bb3d84e2a4aef9b2b5e1270d3a0859ccf7f89282e28cbb",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "commons-40051341": {
+    "surface": "surface-789ca3d229ab.f16",
+    "sourceSha256": "5851e1b9b10cc262a7f96a2539ffd8270de7ecf5087085a8c3e835f9f9f60f3e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "commons-40204019": {
+    "surface": "surface-ba5b46189fd6.f16",
+    "sourceSha256": "caccec51ae15ed1cd5f6150cea33731d1d6dae3d4821df0b6ae7ddf6ed1f3a4a",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "commons-brompton": {
+    "surface": "surface-28e957f15fe1.f16",
+    "sourceSha256": "a028f8b3739bc7617d8a45e0e4fdfaf542435e140bee746318de01ee9d4cb99e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "commons-marche-butte": {
+    "surface": "surface-4884de310aad.f16",
+    "sourceSha256": "8a6f9c7b5b9d24d57380d9e5fb84a22cde04f143629ee280d61c214386f716df",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9651
+  },
+  "ph-abandoned_bakery": {
+    "surface": "surface-df57a22f36a4.f16",
+    "sourceSha256": "b5464b03cbc2d9e56d46bdd8453a0a594c92c5b4722e77cf1ca8ab3bb196b6a1",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_church": {
+    "surface": "surface-e61ca06ecfe8.f16",
+    "sourceSha256": "827bfd805d48b0657c738db0d27fdd425e16923ed7e146c72128159ef8abc671",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-abandoned_construction": {
+    "surface": "surface-7dcbb3f604ec.f16",
+    "sourceSha256": "6afef4eb7c663c8c1f2dff2c69f0adf554ca33962a958e44f43c906f97d5a080",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_factory_canteen_01": {
+    "surface": "surface-61ef1bf9eaf2.f16",
+    "sourceSha256": "f3f42a94cd1d64913627b220294ed2d9ec5f0b79844a6d0baebbdcef8f9b1363",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_factory_canteen_02": {
+    "surface": "surface-dd2ecdf935b1.f16",
+    "sourceSha256": "9edddaa76f30e5b96dbb236046a1abf289547c21b0094a397fa5553147d69ce9",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_games_room_01": {
+    "surface": "surface-680fba26fd50.f16",
+    "sourceSha256": "746bc00e49d8e1235f009cd1b79a8b6594e2e06b8c6d80dcd22d531e278154e8",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_games_room_02": {
+    "surface": "surface-ff93d498c380.f16",
+    "sourceSha256": "d6f273088587310331b22f94501a338c8da0b717e1f80a1ebaa4760546cd667e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_garage": {
+    "surface": "surface-14828c97e7c8.f16",
+    "sourceSha256": "7b97e25fa027babb52cb801fbf5eddcde98e15072f1b2414a9a2f847c8825ad6",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.924
+  },
+  "ph-abandoned_greenhouse": {
+    "surface": "surface-04efe93d08a6.f16",
+    "sourceSha256": "04f22ea258adc0f627566e8cd046e029c8495ff69747156e9672c2647d51d824",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_hall_01": {
+    "surface": "surface-dbb14c9d69b8.f16",
+    "sourceSha256": "1a01f3e5f1acc8d031edd381d6c74f5713d579ffd778046562300b821f65658d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_slipway": {
+    "surface": "surface-702c083b942b.f16",
+    "sourceSha256": "c38bddd94646b11d11393378c1849c98db268af127b5d4dc144517520041057f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9982
+  },
+  "ph-abandoned_workshop": {
+    "surface": "surface-3743ec0a3b87.f16",
+    "sourceSha256": "54a40c74a98912d644f0daf5e42d35ceddb4535bf2e6e10ec77e223e29e2127c",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-abandoned_workshop_02": {
+    "surface": "surface-f329903cd0db.f16",
+    "sourceSha256": "7ba02f75168ab39e60abaf0f6603457ac8d0eb617b8f160821342683ae3ec42d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-adams_place_bridge": {
+    "surface": "surface-3e8dd388019d.f16",
+    "sourceSha256": "8c72b6595e6797c82204db20863cf89834f797064e3cc70f9d4b3382cd5907c4",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-afrikaans_church_exterior": {
+    "surface": "surface-5d400a3e5a34.f16",
+    "sourceSha256": "be383ff7e29cefcd4715276b666deabb4fd0b5df7b805c03e0536d3a825b483e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-afrikaans_church_interior": {
+    "surface": "surface-87652f968c26.f16",
+    "sourceSha256": "9b8de0358e24139a72159700dba6ad622b8d21012de8e1897c9f8040df04cced",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-aft_lounge": {
+    "surface": "surface-f4e8a50f98b8.f16",
+    "sourceSha256": "972099df8d12d2087c4d4cfc4ffefed709f8245234d4dfc53a7bd5318ec80ce7",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-alte_veste_station": {
+    "surface": "surface-b7979e2e6045.f16",
+    "sourceSha256": "07e118c571e28cc313f900af2627e2443a4ec643cd2d15cb00c88a525643f8b6",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9986
+  },
+  "ph-amphitheatre_zanzibar_fort": {
+    "surface": "surface-39b1019fa49f.f16",
+    "sourceSha256": "ce79cca3ec302252e9c4ae9ac7ca5da745eba94eaac439525c33bb918c67ae20",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9957
+  },
+  "ph-ballroom": {
+    "surface": "surface-664aedcf9f66.f16",
+    "sourceSha256": "21307aad2e0105de7bce0758166f96670864aaf330bad3adfef934b2047ff02d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-bell_park_pier": {
+    "surface": "surface-efe9cc990585.f16",
+    "sourceSha256": "fda63b9c9f4e0a89226ee87665a044bf59ef5f6e11bdb81fd16d966a4c0e6690",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9982
+  },
+  "ph-bell_tower": {
+    "surface": "surface-66a2dfe9b00f.f16",
+    "sourceSha256": "d7afae2d3cee251bce35914e88ee8f0beaf31e77a26cb04379de61a1dbde4198",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-belvedere": {
+    "surface": "surface-f881249a1655.f16",
+    "sourceSha256": "929ec4f62dd8a17345717f9ddd234dbf9230822d1ab91ce34468bf26dfe19d14",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9962
+  },
+  "ph-blaubeuren_church_square": {
+    "surface": "surface-56e5e74aa440.f16",
+    "sourceSha256": "cf01ca2669b1de73345eda40aa6c6e19a6c6e9c230de581ea705ac071fff1a5f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9809
+  },
+  "ph-bloem_olive_house": {
+    "surface": "surface-e8db3d07e314.f16",
+    "sourceSha256": "09a3e6403931656142a214b48fb2ce4587f1bdcf08d225be9d8bbee2a3bd7f2b",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9693
+  },
+  "ph-blue_lagoon_night": {
+    "surface": "surface-2c83974bdf9b.f16",
+    "sourceSha256": "b47e0db9262ea6fbd398e7ea3a92576838bdecbbede9d7b37090d24e168bd495",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9287
+  },
+  "ph-braustuble_alley": {
+    "surface": "surface-91097942ff11.f16",
+    "sourceSha256": "5423f9944a3ce348fbb877e30a4782e4f1861c9d40be385464d654ac4feff2bf",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9708
+  },
+  "ph-brick_factory_01": {
+    "surface": "surface-2057920628af.f16",
+    "sourceSha256": "dab3d5eb4d1bc11e814a5d10addcd659da29cc6cf9cf3e201a379fe631be640a",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.997
+  },
+  "ph-buikslotermeerplein": {
+    "surface": "surface-f175aaec8f6c.f16",
+    "sourceSha256": "6af3fbb9c649e53f43c87c38cfa8bd74bee85d05d08ed354193e5a11e29a7d9f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-burnt_warehouse": {
+    "surface": "surface-78e8a569c447.f16",
+    "sourceSha256": "32371684f0a78cc46cbf85512b0b9e2ef8cd19eddd9aeed569346d89b7503763",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-bush_restaurant": {
+    "surface": "surface-dca7444ef062.f16",
+    "sourceSha256": "db71808239009eb443a79a633eb92ecdb61e658fd69ef59438ce7756587f2b55",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-cambridge": {
+    "surface": "surface-49c37eebdf5e.f16",
+    "sourceSha256": "f3f562ff7cf333fbe8b7d3bf9fce51abbc116dc56a119681ffc556e9698e08c0",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9586
+  },
+  "ph-canary_wharf": {
+    "surface": "surface-b3deae265018.f16",
+    "sourceSha256": "b4118a3f8feeb42f313451d929ca722e0fd0e399065ee53a1972c2207271a422",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.967
+  },
+  "ph-castel_st_angelo_roof": {
+    "surface": "surface-a91e800a1694.f16",
+    "sourceSha256": "ea94d25e37cbd7857cb8b66bdfd3beb20eafd70a30e8ebcd5fb85863a4344a86",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9956
+  },
+  "ph-castle_zavelstein_cellar": {
+    "surface": "surface-5826ee4b1e70.f16",
+    "sourceSha256": "8c545ddb0160044f4165d2e795f26105f8a06f1242a8c16654c721d26c2cf712",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-chapel_day": {
+    "surface": "surface-20ebef810606.f16",
+    "sourceSha256": "e7e55f08b346be03a964e09dbc90806e24ec63d194cb3e8f54fb179366ed3a53",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-church_meeting_room": {
+    "surface": "surface-6abc4a86d1e4.f16",
+    "sourceSha256": "0ddd4a578cb1544df5db60d1eae2fa146a5514f2887eceb55b4fdef2869ce684",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-church_museum": {
+    "surface": "surface-2b04d072ee01.f16",
+    "sourceSha256": "13b4e668a257c2bd6c5615583554fc4eeea8a6d3fec08ec3ee4cef09cfcfa12c",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-church_stairway": {
+    "surface": "surface-72be95258720.f16",
+    "sourceSha256": "423cb9dd7a55148e67473f14d44c4044198fe3b54213c2d33ce1086736055d9c",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-cinema_hall": {
+    "surface": "surface-dd30714ee7a8.f16",
+    "sourceSha256": "78114227aa9eeb82bc4cd6ab0b1cfe07fa079f7722e7877d73cf87241447f4c4",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9159
+  },
+  "ph-cinema_lobby": {
+    "surface": "surface-37b57241bbfd.f16",
+    "sourceSha256": "e1c088c7f6845b9ba8364005dca8073f4d3ffcd86cec3ff82744602a5ffb2509",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-circus_arena": {
+    "surface": "surface-85f2514f3ed3.f16",
+    "sourceSha256": "0c280d747fd19e4942cbcdd0b80af840f7332ce01a78f27e1548cf5a5c50bf9e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-circus_maximus_1": {
+    "surface": "surface-7c20121c9a17.f16",
+    "sourceSha256": "28fbf70f3efcee370dae37984959fdc0bddbc862c3e22faae8fd39492f44adc7",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-circus_maximus_2": {
+    "surface": "surface-42b73824a563.f16",
+    "sourceSha256": "5abc4968cb58f6745ccf3815f9506e95c2dad5ffbedd557256780fe8c43e20ab",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-cobblestone_parish_road": {
+    "surface": "surface-9fa3cbf469a3.f16",
+    "sourceSha256": "223fcbad7710c6218944def831d6271df06622d7263a11991389e86bc0ef62e6",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9427
+  },
+  "ph-cobblestone_street_night": {
+    "surface": "surface-f4101b67c0b8.f16",
+    "sourceSha256": "927731d4ec8e2bd4ddd3fe7f3be0321a2eb0dd38cd60b79faf7e64fd50463e89",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9455
+  },
+  "ph-colosseum": {
+    "surface": "surface-30afe34aa5bc.f16",
+    "sourceSha256": "688bf1a08bdb81194080281ccdbd2134679d5b2db0927d7a19d94e192f83db6a",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9986
+  },
+  "ph-comfy_cafe": {
+    "surface": "surface-8e35b1d602f6.f16",
+    "sourceSha256": "4a440bfb5b2bdca65973b1442aafdf463db255379eec343a92317630d9a2e44c",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-courtyard": {
+    "surface": "surface-33e6e849a069.f16",
+    "sourceSha256": "2dfe2396decddb438027c14e2bc4b3ce5df1a16c74f5decbdd7a23fa66b505a7",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9277
+  },
+  "ph-courtyard_night": {
+    "surface": "surface-2ea3e2b4fb41.f16",
+    "sourceSha256": "58627a454d4f57fa90b508dac0589d0498b439c5349e861ad7692c55238dd8d8",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9842
+  },
+  "ph-crosswalk": {
+    "surface": "surface-f2e57bc13ea2.f16",
+    "sourceSha256": "652b0dfab3fff4e50ac6faff740cbdbce341d6b32fc38fd58afa9e4e8b3182ad",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9488
+  },
+  "ph-dancing_hall": {
+    "surface": "surface-8559b6ff683b.f16",
+    "sourceSha256": "f27468275b378136f136e2f68034e231135ef733db9a15f7025f399647ffb836",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-debris_basement_corridor": {
+    "surface": "surface-0d8f32f5c6fd.f16",
+    "sourceSha256": "f8b1279313e07eb32d2cca363dd1c97b98f96d6807a40fe04c6e0481745c1088",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-decor_shop": {
+    "surface": "surface-dd2ea9be4d11.f16",
+    "sourceSha256": "8675320909a6801bda1cea85c42f0a69d01710aac4d05e2476d342d0c9987314",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-distribution_board": {
+    "surface": "surface-e2d2147f6b43.f16",
+    "sourceSha256": "47423b9e77e283600b7a622a723232aa7637f5310967f19cb660cbaa2afefd68",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-docklands_02": {
+    "surface": "surface-cd544718067c.f16",
+    "sourceSha256": "a4816cd1b096aa40b2c92b8ffe9f63f47c8b6f73f807c0c055c72cb7e357591b",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9937
+  },
+  "ph-drachenfels_cellar": {
+    "surface": "surface-72e77bccbef4.f16",
+    "sourceSha256": "049fb100b1a48052827eb82b7ec6af4d98e768de289fe0cfa8c69aacd283500a",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-dresden_square": {
+    "surface": "surface-a1fd1cc1730b.f16",
+    "sourceSha256": "b17f67e53ea9655a7cb5240c05bf025556fdf89f19a627a7ca0c3901060d0ca1",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-dresden_station_night": {
+    "surface": "surface-831798e4b46b.f16",
+    "sourceSha256": "d9e0dac4fc6a6804865b738340ddbd9cf377297e00258baa7506ff105f2e9933",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-dusseldorf_bridge": {
+    "surface": "surface-a289499e17cd.f16",
+    "sourceSha256": "1e402ec5c0b7fbea0176c98e5550f8bc2a8c757cfa02bd0d73a2e397d0cf0bc2",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9966
+  },
+  "ph-evening_museum_courtyard": {
+    "surface": "surface-164ceda2f5a1.f16",
+    "sourceSha256": "d7c749a9bf50f385debb89f689fb0bb6752d59e87e6423a0285c2160e401bf55",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9936
+  },
+  "ph-forgotten_miniland": {
+    "surface": "surface-3ff144fd6c57.f16",
+    "sourceSha256": "a32ed800ca6b15c28f76af2c7610e9851b9c94752c27caafea978941710c92e9",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9982
+  },
+  "ph-georgentor": {
+    "surface": "surface-0e464d98b881.f16",
+    "sourceSha256": "99f85a229931959d373bb530bf492e336555af5a0dd8f482d2b3b76d31f347b9",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-german_town_street": {
+    "surface": "surface-eb7a704434ca.f16",
+    "sourceSha256": "6c5110de307b3f697d4bf43a90260bf0e33d02b2a044ee73c15576daff4a0b16",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9982
+  },
+  "ph-glass_passage": {
+    "surface": "surface-b20ec5026d71.f16",
+    "sourceSha256": "46b50854375a531681369a8c76994b29c29afea70a1dec903e893e43f686ec41",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9821
+  },
+  "ph-golden_bay": {
+    "surface": "surface-51fc4d118e4e.f16",
+    "sourceSha256": "18d667706cf096573e8747dabdb3587dc59dd65b16024974a506d0b56330642d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-graaff_reinet_groote_kerk": {
+    "surface": "surface-73d6f4058155.f16",
+    "sourceSha256": "0d6f5651907e2de8b62ce8b7e1d6a462c597fd9422f62691ff1402c5115b6e2e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-hall_of_finfish": {
+    "surface": "surface-0b77510a144e.f16",
+    "sourceSha256": "24e7afb8404a66093f6dcf5acadef5b2d0c47f373b3e967de038e64e813573c0",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-hall_of_mammals": {
+    "surface": "surface-41a485d39962.f16",
+    "sourceSha256": "70942044d644e3c7099bcea4d7c7b876d250573653c50978647b0c67eeadf317",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-hamburg_hbf": {
+    "surface": "surface-f02443d2dbec.f16",
+    "sourceSha256": "987841c8eb675655353da6463069c0e1b809f66c0aa1966351838514cf69017e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-hansaplatz": {
+    "surface": "surface-30f6b7a22804.f16",
+    "sourceSha256": "f656672d47bcfa49e5b22402164e7321c15ef8a026f29c857b30db9c2c58ea84",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9687
+  },
+  "ph-historic_cloister_passage": {
+    "surface": "surface-574a1141e604.f16",
+    "sourceSha256": "23e2708818294fab4aeed7a45ecc021c57f9f36f41e24b77aa50eff8fba79bda",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-industrial_wooden_attic": {
+    "surface": "surface-5e9bb2c5edfd.f16",
+    "sourceSha256": "a6bff23bbe48125767b4bbaad00c9113a1498b1a2d449aabac0d0a01e581ccc5",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-irish_institute": {
+    "surface": "surface-09539dca3e84.f16",
+    "sourceSha256": "da602b8a6037d2851dc72e1fc3b9f42ff6460cd737adb4fc671bb0fb03e28afd",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-konigsallee": {
+    "surface": "surface-96e130b697e9.f16",
+    "sourceSha256": "ace0736cb54af54eacbad60fa540a271276490f1c44227864ccafc0750bb5841",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9978
+  },
+  "ph-konzerthaus": {
+    "surface": "surface-b5141173f9ae.f16",
+    "sourceSha256": "7112c9d5fe17f54b5fda088d62f8c56762857f5068ca11b1fcdeb967f23b927f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9723
+  },
+  "ph-lake_pier": {
+    "surface": "surface-4a1400a9789c.f16",
+    "sourceSha256": "5bd0592f3573db9489c88e41df0d1b13d6c99b77dc39b401f686826e937cc739",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9972
+  },
+  "ph-large_corridor": {
+    "surface": "surface-16c6ab675f78.f16",
+    "sourceSha256": "a53ec8aa2cc0bcc815d74b3769e1aa4b101b5b2ce79263becf3b29d299aba183",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-laufenurg_church": {
+    "surface": "surface-6a08a2758e5c.f16",
+    "sourceSha256": "c36604d1cd957b8bafae008b74495011ce5667142176ab1a207bf2ef078ec6f8",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9972
+  },
+  "ph-leadenhall_market": {
+    "surface": "surface-3cf0dc43c1a6.f16",
+    "sourceSha256": "582dab2cd589bade8aac268f63bca099884b3607a2d3d4ba1f1fd8c0a7a31ac3",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-medieval_cafe": {
+    "surface": "surface-4500bbf683a3.f16",
+    "sourceSha256": "9bab506df62cc47bb16224b42d31676314b47f548494104e32f99062e9b11022",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.959
+  },
+  "ph-metro_noord": {
+    "surface": "surface-af091c6c15e2.f16",
+    "sourceSha256": "8cc62a6363395245dc8c05f7b010badca8197b9d3f7250a895b523ccb2150cbe",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-metro_vijzelgracht": {
+    "surface": "surface-851550ad3b81.f16",
+    "sourceSha256": "2492ba676eb95c0bba8ed4f0be8114135e07a30a36947f34f7ad416e9bf350cb",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-mirrored_hall": {
+    "surface": "surface-bc1b9e7a8ca9.f16",
+    "sourceSha256": "7189939e4b9a721a7a9a2838ca086aa57c499e067c7b7463edf50b6c7a62cc2e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-missile_launch_facility_01": {
+    "surface": "surface-656007300056.f16",
+    "sourceSha256": "29d26802720f758406be1eada1844b069f2bb371c507ac5fba8f2b06411e7b07",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9156
+  },
+  "ph-modern_buildings_2": {
+    "surface": "surface-c056d62bb658.f16",
+    "sourceSha256": "d84a92454e1d82e5bd9a048f0ca1209dccef246649eac3568abdd9a727b93ed8",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9448
+  },
+  "ph-modern_buildings_night": {
+    "surface": "surface-216c2616c009.f16",
+    "sourceSha256": "33740c10349b5a7cd629a6b1f00fafbe358798b2d62be0d728c8a4aeae90fb33",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9221
+  },
+  "ph-modern_evening_street": {
+    "surface": "surface-27d2491eecf2.f16",
+    "sourceSha256": "c220b2846f8db5f5282e6e1b7fb117eac4fd96e89d0d37a54eb388e081910f92",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9434
+  },
+  "ph-monkstown_castle": {
+    "surface": "surface-eee84f6bc06d.f16",
+    "sourceSha256": "c6f4025be6de88a9ceb5054421cd43598bba30a719f3b726bf48dccb39151b86",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9256
+  },
+  "ph-moon_lab": {
+    "surface": "surface-867f2e92e525.f16",
+    "sourceSha256": "b609508f56c9e7ab9a84e522f4d5cf45557fa7f60b90fd7c621aa5c4fbcbf786",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-museum_of_ethnography": {
+    "surface": "surface-9a3c9de72a9a.f16",
+    "sourceSha256": "71bd9a3950e2543ba9a9692513b67e5202d66b6d6237aebced32997e43c3ec55",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-museum_of_history": {
+    "surface": "surface-5c86da004efa.f16",
+    "sourceSha256": "ca02a23aded53d956240aa44cf6cb43538ac76778b8f0ebe8c8d3b12599789d3",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9963
+  },
+  "ph-mutianyu": {
+    "surface": "surface-31cb976cad42.f16",
+    "sourceSha256": "7540f81440116d341e609ea3c7493faeaae6835e1766fec01e0bb3dce6be0372",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-neuer_zollhof": {
+    "surface": "surface-938e867b8fc6.f16",
+    "sourceSha256": "3b3e7f1bb3d9ff3169ae7dcd584eeff33781c2002cd8d6c85028d8531210b68a",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9888
+  },
+  "ph-old_apartments_walkway": {
+    "surface": "surface-5fbac8fa2010.f16",
+    "sourceSha256": "fe1dc1598bdecadd58fbc371bd249582b82aa140fd982b31c7e1df038f98a7e5",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9103
+  },
+  "ph-old_bus_depot": {
+    "surface": "surface-3c2fdf47f6f5.f16",
+    "sourceSha256": "1922d285e13228f9b715ce3517c117c46babef2228792e25d8a741c748702de5",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-old_depot": {
+    "surface": "surface-b9389902013b.f16",
+    "sourceSha256": "1a010725f8b620867a7dc7a3c87801eb934189e009622969fd66c9ba6fe92842",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9159
+  },
+  "ph-old_hall": {
+    "surface": "surface-51f63b12c79c.f16",
+    "sourceSha256": "79e26ab44f2fc3d5bb2c6d7a6a279e107c2d25fc3b59832cfda7b94301606222",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-old_outdoor_theater": {
+    "surface": "surface-ac1595ff549b.f16",
+    "sourceSha256": "3f0e0e6532d125da0097097e8650032480139aa68fcd9cabc9c4a2c65c884d25",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-old_quarry_gerlingen": {
+    "surface": "surface-9541d120d38a.f16",
+    "sourceSha256": "b194b81f5eea55a34e5b3084f37c15f39f98529d88619e9e85467271ce903959",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-old_room": {
+    "surface": "surface-9bbd830572e1.f16",
+    "sourceSha256": "f939e84a419edcbd318a30d08172efbf1546250eada0b853789a38fdddb484bd",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-outdoor_umbrellas": {
+    "surface": "surface-04a2401c8d81.f16",
+    "sourceSha256": "bc6b89e8e5023be997ce8ea85df6d7eb7111e1f1517ad887b9cc88947552cd47",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.917
+  },
+  "ph-overcast_industrial_courtyard": {
+    "surface": "surface-f18ba20db80c.f16",
+    "sourceSha256": "a5ece291286729d896e2ecb91b51cd97c1384e35376f3b34a7fef84a90f06370",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-palermo_sidewalk": {
+    "surface": "surface-8c85964c564e.f16",
+    "sourceSha256": "7cd9a82e44ee8a6043a85cd93979fbc1ef1ba27c24b234639881434133479280",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9638
+  },
+  "ph-palermo_square": {
+    "surface": "surface-4c46f7056539.f16",
+    "sourceSha256": "c4b587a6b09d6ae78acafa63a34ba877db2bf62ca8733aa0dc05292ffb49a9d4",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9935
+  },
+  "ph-paul_lobe_haus": {
+    "surface": "surface-4936252cdc8a.f16",
+    "sourceSha256": "767074292b17aa6a99314069f8d94b8783f9eddce87a92b27b87ad7f6511f1db",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9309
+  },
+  "ph-penguin_museum": {
+    "surface": "surface-7489d1d583ce.f16",
+    "sourceSha256": "e61b7332ccce6c99344fd7f4468f091efa721253c9c1b580bf119d2c9c08f28a",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-peppermint_powerplant": {
+    "surface": "surface-b1f03408469c.f16",
+    "sourceSha256": "56b4d3f1ac5e08d9ba70705a630878024abf723eca1e743f790b95fedc9ec397",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-pergola_walkway": {
+    "surface": "surface-85e912075958.f16",
+    "sourceSha256": "f14c5d6bf02e4b916da97a66c99036bc795e6a83b46b4a1b398fc8e165fb0609",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9264
+  },
+  "ph-phone_shop": {
+    "surface": "surface-b6085fc8a345.f16",
+    "sourceSha256": "010ee992de0ad0b9e461c1a580199d38b7f9dd733908b9fe028917000583bad0",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-piazza_bologni": {
+    "surface": "surface-695ff53f493a.f16",
+    "sourceSha256": "524c04920920081d893cf2dffe9647500da6efc43783aee058717f7cceaca9d7",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9817
+  },
+  "ph-piazza_san_marco": {
+    "surface": "surface-fa583be98e8a.f16",
+    "sourceSha256": "ef2b97116cc57ff6937a5ef9e097a6e02e32c27fa203c5408b7e254b346ed9e2",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9937
+  },
+  "ph-pillars": {
+    "surface": "surface-a4b1ca422ca7.f16",
+    "sourceSha256": "ad56efb7be3610d5ded39595c2129b2b9372f16b517a98d03637684ec8376b6f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9153
+  },
+  "ph-plac_wolnosci": {
+    "surface": "surface-5672ba30c465.f16",
+    "sourceSha256": "c440bac1c015312f9de428f7d1af6ef5a418916964e310b194c13ef16c003aa1",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-portland_landing_pad": {
+    "surface": "surface-daca5ba10be0.f16",
+    "sourceSha256": "a6cf0691e833895f2eb95e8a64d940c744e5d38b89fc54d7414d6687e402cf28",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9985
+  },
+  "ph-potsdamer_platz": {
+    "surface": "surface-3a0cd223ef29.f16",
+    "sourceSha256": "e79833593e1ceea66cdbb374e440b187dbf43f4267f1d29233123f2414f15621",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9727
+  },
+  "ph-pretville_cinema": {
+    "surface": "surface-2a96bb77ae6d.f16",
+    "sourceSha256": "0b3023ba11ebd662ea27af95001e86ea2da5d335e2823deb635697e1908e0d3c",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-pretville_street": {
+    "surface": "surface-dfa4ec9d5dc2.f16",
+    "sourceSha256": "5f4a76f535ac647f8b9dbb9eec49f2b18cd02470bee11e3ee1b7a4ef19046c91",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9965
+  },
+  "ph-pump_station": {
+    "surface": "surface-e3072f99f498.f16",
+    "sourceSha256": "c2807858802905dc7f89dd5116816ca30d9e8fc0dffd7dc1122503708c493bea",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-pylons": {
+    "surface": "surface-11c979ceb5e3.f16",
+    "sourceSha256": "af32543f917fe568d5bc3e1ae7288f2bb83514973ae7fe291699d0bd407046b4",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9114
+  },
+  "ph-quadrangle_cloudy": {
+    "surface": "surface-883158750c12.f16",
+    "sourceSha256": "0c8e3f3d4d5bfba1691327b630bef3d3dcb1f26b1335c07ed9a9822e3a766a4e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9985
+  },
+  "ph-quadrangle_sunny": {
+    "surface": "surface-8bc931458b77.f16",
+    "sourceSha256": "51cd45e880edc71024bbfd04a9283ac21b6bc90a0a2811582cab5072fd5615fa",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9985
+  },
+  "ph-quattro_canti": {
+    "surface": "surface-9c5ac9249186.f16",
+    "sourceSha256": "fd735ddbd307a818d9f41f296f93e894dafac0156ba7d046d95cf093dd331bdf",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9776
+  },
+  "ph-rathaus": {
+    "surface": "surface-7b03348ad333.f16",
+    "sourceSha256": "abddcb73f0794672d74960bff92402736dfcc4fa32ac84773e2f39542741a23f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9965
+  },
+  "ph-red_church": {
+    "surface": "surface-c997911ca5bd.f16",
+    "sourceSha256": "444243a896ffc75b56b305c969def0ba9bb82f6da10b2dd6fb00104b4e3dee38",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9899
+  },
+  "ph-red_wall": {
+    "surface": "surface-9d194a30c901.f16",
+    "sourceSha256": "ea0ef31ba21068a408006e8c2afa7d192458454d0e6f2c461b42f4fd42d994ab",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.949
+  },
+  "ph-reinforced_concrete_01": {
+    "surface": "surface-de8585791d6e.f16",
+    "sourceSha256": "4da4c1ce6b8c9d0ab2c9a72a79eec825692f89a883c45baa124ea4462ed5dd33",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9245
+  },
+  "ph-reinforced_concrete_02": {
+    "surface": "surface-c710c30efb73.f16",
+    "sourceSha256": "9b0bb609fcb88af3d5359f6950d93245e0ca48b861aa91e04799a85f9e3fec28",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9086
+  },
+  "ph-roofless_ruins": {
+    "surface": "surface-42c423949bc6.f16",
+    "sourceSha256": "4e1d102462f9e890628104bcb9964f824abda6bc28512ea17f1f3bcafb0ae89b",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9918
+  },
+  "ph-rostock_laage_airport": {
+    "surface": "surface-8b69c3c2391c.f16",
+    "sourceSha256": "dbb344e07abb403556bd32bfdc0c131c1c0a5cf404494734bdd15a03d8b1c3a7",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-rotes_rathaus": {
+    "surface": "surface-9fef234f1f04.f16",
+    "sourceSha256": "5bfd28ef119def93c1110b1e64b1d96e1fe55cbce8bfa34f02b493e58539d24e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9974
+  },
+  "ph-round_platform": {
+    "surface": "surface-abf64db713f8.f16",
+    "sourceSha256": "92f1fba4126c4a7a1c35f9acc7aa039491eb78d78fd1be1258cfb74267fd103e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9981
+  },
+  "ph-royal_esplanade": {
+    "surface": "surface-a4b81d051289.f16",
+    "sourceSha256": "e5c055175a3330d672bb52e38b189ad8ce54a6fd1eaa8d7c13d4002cd22d8bb2",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-san_giuseppe_bridge": {
+    "surface": "surface-ae73eb344371.f16",
+    "sourceSha256": "060329977aa25fd748c6ad70159405a45082b390093bc06e91b3dcb0548d6fff",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9936
+  },
+  "ph-schadowplatz": {
+    "surface": "surface-67634832a2d8.f16",
+    "sourceSha256": "cd85774d486948aa082cc3a18a5f4e7ccd355b61177ef4102e4ff7ef6a4f2605",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9279
+  },
+  "ph-sculpture_exhibition": {
+    "surface": "surface-479110c73d8d.f16",
+    "sourceSha256": "f8356e399fb7baf5664afd0b4ffd4c25fcfbbd9ec492a5a1c2988937d001bde9",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-sepulchral_chapel_basement": {
+    "surface": "surface-60000bbb88c9.f16",
+    "sourceSha256": "13b59b18f5cedd0b2b5ab5f5b3b6603c7bf83ef0dc9511dc30a368a7efbfc538",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-sepulchral_chapel_rotunda": {
+    "surface": "surface-596996929974.f16",
+    "sourceSha256": "85d4ba8eef635e89498269d06a2cd7d6612e50b62d6f4f6a342b3de8d1cf1328",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9162
+  },
+  "ph-shanghai_bund": {
+    "surface": "surface-6525204f076a.f16",
+    "sourceSha256": "7caff70f31b13d47326a5ba7a278e691a46e6aca2b0853f45e5a35ccc9bfa467",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-shanghai_riverside": {
+    "surface": "surface-c3f27d5b700b.f16",
+    "sourceSha256": "0357ed56e4560d44d7501beb2368382d58d50caeb2a1fe6ee805728cac307f17",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9981
+  },
+  "ph-small_cathedral": {
+    "surface": "surface-db860ff2a179.f16",
+    "sourceSha256": "1cd07232b91060146a995bb721b5790fb46eb1f61747cb6039a4fe2c793b5ea1",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-small_cathedral_02": {
+    "surface": "surface-e84ac277c02d.f16",
+    "sourceSha256": "6a1b0eb42b88feb75d506bc534affc1199e1c74434d056eaaa52227475c5df89",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9543
+  },
+  "ph-small_harbor_01": {
+    "surface": "surface-22b517bbc42d.f16",
+    "sourceSha256": "d4dd100f7118ecd2989d2817d45f22660a290bef82e0a62bda5cfba869f59cf5",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9981
+  },
+  "ph-smelting_tower_01": {
+    "surface": "surface-e1e80ee204cd.f16",
+    "sourceSha256": "1357e8ccd264cec2a29b77cc6d278d9784069576e995dd38340f6eb19c09b8dd",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9779
+  },
+  "ph-smelting_tower_02": {
+    "surface": "surface-aa59602ccbc6.f16",
+    "sourceSha256": "ff86aaa3b2a22a98cf83d0f4aa6d54b199766e40d4e5362cc5fdf9c8a2fda15f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9568
+  },
+  "ph-smelting_tower_interior": {
+    "surface": "surface-2134ead1c6cc.f16",
+    "sourceSha256": "87f53670b5788d5c2bc77db32017fc895ee76cb4464701a9949ae09d3cb18fc5",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9156
+  },
+  "ph-solitude_interior": {
+    "surface": "surface-c65dad1b3eb4.f16",
+    "sourceSha256": "8560e1cdc0eafb3c9d323d57c1b9e518e85ddd6321a53c717385ace0808eca78",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-st_fagans_interior": {
+    "surface": "surface-6b9fe690ba35.f16",
+    "sourceSha256": "157dad3eaa97f7678adbb372d477c36389d5f5624d02f0cf143644fb704bc3c2",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-st_peters_square_night": {
+    "surface": "surface-126066fe231f.f16",
+    "sourceSha256": "f1fa1ddd2d4792890da06fd10cd2b032453ab3a1cf240e4f39937fcc885369bc",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-stone_alley_02": {
+    "surface": "surface-d943e065d757.f16",
+    "sourceSha256": "8fc6046f6ac23ac1e054f9360691e4aa19300f03c28c53cc5a9764eaffb2cd2e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9227
+  },
+  "ph-stone_alley_03": {
+    "surface": "surface-7f644aa63694.f16",
+    "sourceSha256": "0b5e455ba8c9510079f57416d03e95706b2782590db8c766b56e6fa19c250230",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9302
+  },
+  "ph-stuttgart_suburbs": {
+    "surface": "surface-92e40b1115f5.f16",
+    "sourceSha256": "bda1c775ecb4ef10e75932a47ce0ea41ccbe6afd12e96e1d048472cdaa5202c1",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-subway_entrance": {
+    "surface": "surface-210508027d21.f16",
+    "sourceSha256": "2a02d2984b461602938554060132761d3c27b115c3b715e3f99c487ef5a40dda",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-summer_stage_01": {
+    "surface": "surface-d12c7af7b0c9.f16",
+    "sourceSha256": "72bc6043ac30ac1e13b8bc3295bc954bc3b30eb9e9f498af4c41788740beb934",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9501
+  },
+  "ph-summer_stage_02": {
+    "surface": "surface-3228102fde81.f16",
+    "sourceSha256": "84efbebf0dc8dfc5239665c23d51dfcb423e0c2551486f21da3ba5f1e113a2b6",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9985
+  },
+  "ph-sunset_jhbcentral": {
+    "surface": "surface-245ea2486998.f16",
+    "sourceSha256": "cd9d82a6dfa7c6e63a090739575d748f2fe84e5898326be67c0f058bcc80325e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9981
+  },
+  "ph-tears_of_steel_bridge": {
+    "surface": "surface-53188bb6d60e.f16",
+    "sourceSha256": "fd65028eb06a9f570ae5d764f40b0981a6bedb687d3e57862fdd9fcab5d5673f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9976
+  },
+  "ph-teatro_massimo": {
+    "surface": "surface-c613de81dc4b.f16",
+    "sourceSha256": "113902e375312b57e7af3a5a1d4b8ef5660220389c898e4e64a0ec2af41a8c0d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-teufelsberg_ground_1": {
+    "surface": "surface-b6a05047986c.f16",
+    "sourceSha256": "c81ee65f406d80feba78e17b8e491596e889ad11d5bc126409ea3ac148ffcc63",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9815
+  },
+  "ph-teufelsberg_ground_2": {
+    "surface": "surface-3398294c7ee3.f16",
+    "sourceSha256": "04bc0522e2b7b6333cd03195076a180efb5f70707f4bb42c0c5a3cd215885d03",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9945
+  },
+  "ph-teufelsberg_inner": {
+    "surface": "surface-df006c6e9b97.f16",
+    "sourceSha256": "5e895695e0aca5cc80539a59f170a2bdb9b511b4236add4be9601eb76ef58bc2",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9156
+  },
+  "ph-teufelsberg_lookout": {
+    "surface": "surface-c05c4b2ef2e5.f16",
+    "sourceSha256": "4f5a9f12bb00db6732de625655024ce87a9f171122ba6b71dce53dccfe532b8a",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9313
+  },
+  "ph-teufelsberg_roof": {
+    "surface": "surface-2d0a383718be.f16",
+    "sourceSha256": "9bfbc568804160b54a9901cced515a53ec6689c77b7e9bebd349bb3e35779399",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9985
+  },
+  "ph-teutonic_castle_moat": {
+    "surface": "surface-37978f8b002d.f16",
+    "sourceSha256": "a91382425ae2009a425af77963e699954c15b0a4ceede2873c91c594b6ee1032",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-thatch_chapel": {
+    "surface": "surface-d105505ad3f0.f16",
+    "sourceSha256": "aec0f09865f09b585f4020b91bdd5b597e4a9dbfc3833ab1d90b12e1e0a9763d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-the_sky_is_on_fire": {
+    "surface": "surface-3bcc00101a8a.f16",
+    "sourceSha256": "c2209c32da226987fe7b10111d3a3383d67c88038855f09933b5dbe98c98cd82",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9981
+  },
+  "ph-theater_01": {
+    "surface": "surface-cdb6ca420142.f16",
+    "sourceSha256": "bd9c0c23fbf716e4a39fca7fd10ae31694aca1dd013d795517fc4ebbb0b6ccfc",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-theater_02": {
+    "surface": "surface-3f685e507aca.f16",
+    "sourceSha256": "446dda63d00443ba543b87fdf0813e579f2c107c6a2f84ca26ab4e69125e783d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-trekker_monument": {
+    "surface": "surface-867e6ac59c80.f16",
+    "sourceSha256": "7a97846a972c0cbdad3e20cfaa0f1b15d530eb196e376917fca4ae7ac23bae2c",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9257
+  },
+  "ph-ulmer_muenster": {
+    "surface": "surface-43c2dd9cf317.f16",
+    "sourceSha256": "ebb981b77d0f28e8ffbba5b630610490a613296f444800d8616d17ad72b66ecc",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9974
+  },
+  "ph-urban_alley_01": {
+    "surface": "surface-df67f29eb197.f16",
+    "sourceSha256": "40d56d3537eb40a3bfde1bc72a6e8e449dc013a6eb15a991f840892574c9f4b9",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9304
+  },
+  "ph-urban_courtyard": {
+    "surface": "surface-de18b3cb9ec5.f16",
+    "sourceSha256": "5d1cfbd699c267d63ba911c77e691afcbb1e6d2b202667c6374f7f334436fb6f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9544
+  },
+  "ph-urban_courtyard_02": {
+    "surface": "surface-a4d3e14c7ba7.f16",
+    "sourceSha256": "2b8383eed280bf573c8f17d347bfaad75dbdda64a63cca66653a9e51c96b9197",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9686
+  },
+  "ph-urban_street_01": {
+    "surface": "surface-fdd322cc1327.f16",
+    "sourceSha256": "c74966464017013565f57a3c16651d7a76c7e28815a85c4627fc479fb380f91e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9523
+  },
+  "ph-urban_street_04": {
+    "surface": "surface-67291c5f67bc.f16",
+    "sourceSha256": "e63a2ab2ef14741fdf8378fecc280f42add7f1e1ae9a44656739ddc8baf0c83e",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9861
+  },
+  "ph-ushaka_dolphin_stadium": {
+    "surface": "surface-baa57577eeab.f16",
+    "sourceSha256": "282e8a3e357a3f327e34dc7a9bd4a70f7f2e3654f69503eca4486b4d6bf5acb3",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9204
+  },
+  "ph-ushaka_sea_world_aquarium": {
+    "surface": "surface-a4ef5fffa399.f16",
+    "sourceSha256": "25a3713d1c5fe91e38b544a2fe58178d6ec872ebd7f530e61ee94f86bac1216b",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-vatican_road": {
+    "surface": "surface-5484390044d7.f16",
+    "sourceSha256": "dd23b0b88c73d33cc903d6055a7b5bf0937361ef4f455e2d20c09eeacf23f5c8",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9961
+  },
+  "ph-venetian_crossroads": {
+    "surface": "surface-00b01b75eec5.f16",
+    "sourceSha256": "bdce4b986bb148d884ad0fd32c788c7537fb6587c83d6f3a0b885b89f47da92d",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9509
+  },
+  "ph-venice_dawn_1": {
+    "surface": "surface-531bee5256a5.f16",
+    "sourceSha256": "49e26c8da89e85c3e171e1eb9ae745cd14577d79982a93796c3f504dd39bb1ba",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9982
+  },
+  "ph-venice_dawn_2": {
+    "surface": "surface-0fde0367d043.f16",
+    "sourceSha256": "7b1bf3da54511c7ba164d45c963d9f8f90de49129deb22f1318e9a0d4877a100",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9923
+  },
+  "ph-vestibule": {
+    "surface": "surface-fd04f9a53688.f16",
+    "sourceSha256": "4326e617c15a56c05bffa4a29e001ac803798d0accf52f07bdcc0fc53bd3c7a2",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-vignaioli_night": {
+    "surface": "surface-70b702ec732d.f16",
+    "sourceSha256": "b9540cff5a495c60949236f01e633bf4f74c25fdb2833ee7e8a5abdd5ac20e75",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9883
+  },
+  "ph-voortrekker_interior": {
+    "surface": "surface-421ee856e71a.f16",
+    "sourceSha256": "919f26fa66c3ea11a99ec4c78452deeb03f9c3dac05f7bcae54c13f95be3e2e3",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-warm_restaurant_night": {
+    "surface": "surface-981129c330ec.f16",
+    "sourceSha256": "6a9b525dd007be8329003218d2b716fc05c28703de076e141855215ca4daf271",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-whale_skeleton": {
+    "surface": "surface-09e1107a77ff.f16",
+    "sourceSha256": "dcfbede7d4432a6c3238e135dc6b940d05e101bc69bbc6b9d0f628ed181144b9",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-white_chapel": {
+    "surface": "surface-03c5fef5ccec.f16",
+    "sourceSha256": "052d400b3465e1326a04f952992980e13b5f369aee218e47c6ea410ec93a5645",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-wide_street_01": {
+    "surface": "surface-f217a3c139a3.f16",
+    "sourceSha256": "198ea44cb0fcbf72f9053cc05ac2e2d3bd1bb86dafab820037ee2662654446f9",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9984
+  },
+  "ph-wide_street_02": {
+    "surface": "surface-655bf325b6e9.f16",
+    "sourceSha256": "eab6f0c921888f40402fc1c365e537599b6bc4cf9b24b30fedbbc09c88e52e05",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9982
+  },
+  "ph-winter_evening": {
+    "surface": "surface-ac2cce8ef818.f16",
+    "sourceSha256": "6daf3771766e32945094bb10e2f76d15edddc7f3b0b8ce3eeb106041b4d3828f",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9682
+  },
+  "ph-wooden_lounge": {
+    "surface": "surface-60cd17531f40.f16",
+    "sourceSha256": "ed52ee29400d6f012a924883fd1b36aced6dc3f90479eae532f60b35861e1d23",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.916
+  },
+  "ph-zavelstein": {
+    "surface": "surface-8def1f22b5be.f16",
+    "sourceSha256": "8c3ddceeb03ad6b423d50830c5d7a2441d44daa8375205f52a4c3fa883966d45",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9574
+  },
+  "ph-zhengyang_gate": {
+    "surface": "surface-93886989782a.f16",
+    "sourceSha256": "a6ccb7cecbe578f1e34a6782a02934c2ec514cb7fa9a445ec38694a2ba6d69e0",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  },
+  "ph-zwinger_night": {
+    "surface": "surface-f7c50e5bf39b.f16",
+    "sourceSha256": "0b2cd426df647568fb990484a95f1c42599af52f34fac1328504f71f037dbd83",
+    "depth": "DA360_large",
+    "lighting": "360 views, colour",
+    "channels": 3,
+    "format": "f16",
+    "coverageFraction": 0.9983
+  }
+}

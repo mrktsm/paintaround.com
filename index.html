@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#09090b" />
+  <link rel="icon" type="image/png" href="/favicon.png?v=abstract-circle-1" />
+  <link rel="manifest" href="/manifest.json" />
+  <title>Draw on the world</title>
+  <meta property="og:title" content="Draw on the world" />
+  <meta property="og:description" content="Leave your mark on Street View. Draw, discover, and explore what others have left behind." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Draw on the world" />
+  <meta name="twitter:description" content="Leave your mark on Street View. Draw, discover, and explore what others have left behind." />
+  <script>
+    // Fix iOS Safari viewport height — uses visualViewport API with debounced fallback
+    (function () {
+      var timeout;
+      function getHeight() {
+        if (window.visualViewport) return window.visualViewport.height;
+        return window.innerHeight;
+      }
+      function setAppHeight() {
+        document.documentElement.style.setProperty('--app-height', getHeight() + 'px');
+      }
+      function debouncedSetAppHeight() {
+        clearTimeout(timeout);
+        timeout = setTimeout(setAppHeight, 100);
+      }
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', debouncedSetAppHeight);
+      }
+      window.addEventListener('resize', debouncedSetAppHeight);
+      window.addEventListener('orientationchange', function () {
+        setTimeout(setAppHeight, 300);
+      });
+      setAppHeight();
+    })();
+  </script>
+</head>
+
+<body style="background:#ffffff">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

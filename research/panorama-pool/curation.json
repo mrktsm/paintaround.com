@@ -1,0 +1,24 @@
+{
+  "reviewedAt": "2026-11-15",
+  "excluded": [
+    { "id": "ph-abandoned_tank_farm_03", "reason": "Mostly empty open ground and distant structures." },
+    { "id": "ph-abandoned_hopper_terminal_04", "reason": "Mostly empty open ground, little nearby drawing detail." },
+    { "id": "ph-derelict_airfield_02", "reason": "Empty airfield; weak fit for the user's busy-place brief." },
+    { "id": "ph-abandoned_tank_farm_01", "reason": "Mostly empty open ground and distant structures." },
+    { "id": "ph-derelict_airfield_01", "reason": "Empty road and distant structures." },
+    { "id": "ph-abandoned_waterworks", "reason": "Open scrubland with few useful nearby surfaces." },
+    { "id": "ph-abandoned_hopper_terminal_01", "reason": "Mostly empty open ground and distant structures." },
+    { "id": "ph-gothic_manor_01", "reason": "Manor is distant; scene mostly open ground." },
+    { "id": "ph-gothic_manor_02", "reason": "Manor is distant; scene mostly open ground." },
+    { "id": "ph-limpopo_golf_course", "reason": "Open grass and water; weak fit for the user's busy-place brief." },
+    { "id": "ph-derelict_overpass", "reason": "Empty road and distant structures." },
+    { "id": "ph-furry_clouds", "reason": "Dominated by sky and open waterfront." },
+    { "id": "ph-air_museum_playground", "reason": "Mostly empty grass, distant museum objects." }
+  ],
+  "prefer": [
+    "ph-decor_shop", "ph-phone_shop", "ph-warm_restaurant_night", "ph-georgentor",
+    "ph-konigsallee", "ph-glass_passage", "ph-cinema_lobby", "ph-mosaic_tunnel",
+    "ph-pillars", "ph-vestibule", "ph-solitude_interior", "ph-aft_lounge",
+    "ph-dusseldorf_bridge", "ph-entrance_hall", "ph-bush_restaurant"
+  ]
+}

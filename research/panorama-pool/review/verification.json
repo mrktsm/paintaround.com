@@ -1,0 +1,40 @@
+{
+  "verifiedAt": "2026-11-16T06:35:04.585Z",
+  "count": 200,
+  "byProvider": {
+    "Poly Haven": 194,
+    "Wikimedia Commons": 6
+  },
+  "byCountry": {
+    "Italy": 15,
+    "Germany": 43,
+    "France": 4,
+    "United Kingdom": 9,
+    "Location recorded": 15,
+    "China": 4,
+    "Location not recorded": 41,
+    "South Africa": 25,
+    "Ukraine": 16,
+    "Netherlands": 5,
+    "Ireland": 8,
+    "Poland": 9,
+    "Romania": 4,
+    "United States": 2
+  },
+  "byCategory": {
+    "Streets & squares": 71,
+    "Industrial & ruins": 44,
+    "Interiors & culture": 45,
+    "Churches & heritage": 19,
+    "Waterfronts & bridges": 19,
+    "Parks & gardens": 2
+  },
+  "checks": [
+    "unique IDs and original hashes",
+    "original SHA-256 matches downloaded bytes",
+    "original dimensions >=6000px and exactly 2:1",
+    "4K, 800px and 2K derivatives decode at expected dimensions",
+    "source, author, license and evidence recorded"
+  ],
+  "visualReview": "Contact sheets generated; individual sphere seams, nadir and stitch quality are not certified."
+}

@@ -1,0 +1,1331 @@
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #09090b;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+#root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  overflow: hidden;
+  background: #09090b;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root.native {
+  padding-bottom: 0;
+}
+
+.app {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+.viewer-container {
+  position: absolute;
+  top: calc(-1 * env(safe-area-inset-top, 0px));
+  left: calc(-1 * env(safe-area-inset-left, 0px));
+  right: calc(-1 * env(safe-area-inset-right, 0px));
+  bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+}
+
+/* Reveal the panorama immediately when its image is ready. */
+.viewer-container div[class^="mapillary"] {
+  opacity: 0;
+  transition: none;
+}
+
+.viewer-container.loaded div[class^="mapillary"] {
+  opacity: 1 !important;
+}
+
+.viewer-container div[class^="mapillary"] canvas {
+  opacity: 1 !important;
+  transition: none !important;
+}
+
+.viewer-container {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Drawing tools show their own brush-size circle (wrapped onto the surface), so hide the
+   system cursor. The eraser has no circle and keeps the crosshair. */
+.viewer-container.drawing-active,
+.viewer-container.drawing-active * {
+  cursor: none !important;
+}
+
+.viewer-container.drawing-active.tool-eraser,
+.viewer-container.drawing-active.tool-eraser * {
+  cursor: crosshair !important;
+}
+
+.viewer-container.drawing-active.panning,
+.viewer-container.drawing-active.panning * {
+  cursor: grabbing !important;
+}
+
+.viewer-container.drawing-active {
+  touch-action: none;
+}
+
+/* iOS-Inspired Bottom Toolbar */
+/* Vertical toolbar on the left edge: the original horizontal bar rotated 90°, so its
+   base sits on the screen's left edge and the pens emerge pointing right.
+   NOTE: rotated local +x = screen down, so shadow offsets below use X, not Y. */
+.toolbar.toolbar--native {
+  left: 0;
+}
+
+.toolbar {
+  position: absolute;
+  /* Full-height white sidebar on the left edge (iPad palette style). Pens emerge
+     from the screen edge inside it; the active/hovered pen slides further out. */
+  left: 0;
+  /* top-aligned just under the undo/redo icons (not vertically centred) */
+  top: calc(40px + env(safe-area-inset-top, 0px));
+  transform-origin: top left;
+  /* Shared size for pens + swatch; transform scaling is the older-browser fallback. */
+  --toolbar-scale: 1.15;
+  transform: rotate(90deg) scale(var(--toolbar-scale)) translate(0, -100%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0;
+  padding: 17px 20px;
+  background: transparent;
+  border-radius: 28px;
+  /* Fallback for browsers without clip-path; true squircle applied via JS */
+  z-index: 20;
+  transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+  /* The sidebar is drawn by ::before; no squircle clip on the bar itself */
+  overflow: visible;
+  clip-path: none !important;
+  /* Mask pens precisely at the rounded bottom */
+  max-width: calc((100vh - 84px) / var(--toolbar-scale));
+  box-sizing: border-box;
+}
+
+/* Lay out at the final display size rather than enlarging a composited bitmap.
+   The rotation remains exactly 90 degrees; the toolbar keeps the same position. */
+@supports (zoom: 1) {
+  .toolbar {
+    zoom: var(--toolbar-scale);
+    top: calc((40px + env(safe-area-inset-top, 0px)) / var(--toolbar-scale));
+    transform: rotate(90deg) translate(0, -100%);
+  }
+}
+
+/* Depth for the edge-mounted pens. */
+.pen-tip {
+  /* contact shadow + soft ambient shadow */
+  filter: drop-shadow(1px 0 0.6px rgba(0, 0, 0, 0.22)) drop-shadow(3px 0 5px rgba(0, 0, 0, 0.14));
+  transition: filter 0.2s ease-out;
+}
+
+/* Pen slides out -> reads as lifting toward you: shadow grows and softens */
+.pen-btn.active .pen-tip {
+  filter: drop-shadow(1px 0 0.8px rgba(0, 0, 0, 0.22)) drop-shadow(5px 0 8px rgba(0, 0, 0, 0.17));
+}
+
+@media (hover: hover) {
+  .pen-btn:hover .pen-tip {
+    filter: drop-shadow(1px 0 0.8px rgba(0, 0, 0, 0.22)) drop-shadow(4px 0 7px rgba(0, 0, 0, 0.16));
+  }
+}
+
+/* The sidebar panel. Lives inside the rotated toolbar: local top = screen right
+   edge of the sidebar, local left/right = screen top/bottom (stretched past the
+   viewport so it spans the whole height). */
+.toolbar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: -80px;
+  left: -100vh;
+  right: -100vh;
+  /* light grey (not white) so the white pens stand out; slightly see-through + frosted */
+  background: rgba(226, 226, 231, 0.78);
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  /* hairline + soft shadow on the sidebar's right edge (local -y = screen right) */
+  box-shadow:
+    0 -0.5px 0 rgba(0, 0, 0, 0.1),
+    0 -6px 20px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Undo/redo on the sidebar: icons only, rounded highlight on hover */
+.sidebar-icon-btn {
+  background: transparent;
+  border-radius: 10px;
+  transition: background-color 0.15s ease, opacity 0.2s ease;
+}
+@media (hover: hover) {
+  .sidebar-icon-btn:not(:disabled):hover {
+    background: rgba(0, 0, 0, 0.07);
+  }
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  /* Center the color grid vertically */
+  justify-content: center;
+  gap: 14px;
+  margin-left: 0;
+  margin-bottom: 10px;
+  /* Centered in the 78px space of the retracted pens */
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  padding-left: 6px;
+}
+
+.tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  background: transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  color: #3c3c43;
+  transition: all 0.2s ease;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .tool-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+}
+
+.tool-btn.active {
+  background: rgba(0, 0, 0, 0.15);
+  color: #1c1c1e;
+}
+
+.tool-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* Pencil & Marker Container */
+.pen-container {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 14px;
+  height: 100px;
+  padding: 0;
+  margin-top: -30px;
+  margin-bottom: -8px;
+  /* Pull pens down through the padding so they clip at the toolbar bottom edge */
+  margin-left: 20px;
+  padding-right: 12px;
+  border-radius: 0 0 12px 12px;
+  flex-shrink: 0;
+}
+
+.pen-btn {
+  pointer-events: auto;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.2s ease-out;
+  width: 30px;
+  min-width: 30px;
+  height: 130px;
+  z-index: 1;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transform: translateY(70px);
+  flex-shrink: 0;
+}
+
+@media (hover: hover) {
+  .pen-btn:hover {
+    transform: translateY(63px);
+  }
+
+  .pen-btn.active:hover {
+    transform: translateY(50px);
+  }
+}
+
+.pen-btn.active {
+  transform: translateY(50px);
+}
+
+.pen-tip {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  -webkit-transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.pen-btn.pencil .pen-tip,
+.pen-btn.marker .pen-tip,
+.pen-btn.crayon .pen-tip {
+  width: 48px;
+  height: 130px;
+}
+
+.pen-btn.fountainPen .pen-tip,
+.pen-btn.watercolor .pen-tip {
+  width: 39px;
+  height: 106px;
+}
+
+.pen-btn.eraser .pen-tip {
+  width: 22px;
+  height: 108px;
+}
+
+.pen-btn.eraser {
+  transform: translateY(48px);
+}
+
+.pen-btn.eraser.active {
+  transform: translateY(28px);
+}
+
+@media (hover: hover) {
+  .pen-btn.eraser:hover {
+    transform: translateY(41px);
+  }
+
+  .pen-btn.eraser.active:hover {
+    transform: translateY(28px);
+  }
+}
+
+.pen-btn.fountainPen,
+.pen-btn.watercolor {
+  transform: translateY(46px);
+}
+
+.pen-btn.fountainPen.active,
+.pen-btn.watercolor.active {
+  transform: translateY(26px);
+}
+
+@media (hover: hover) {
+
+  .pen-btn.fountainPen:hover,
+  .pen-btn.watercolor:hover {
+    transform: translateY(39px);
+  }
+
+  .pen-btn.fountainPen.active:hover,
+  .pen-btn.watercolor.active:hover {
+    transform: translateY(26px);
+  }
+}
+
+/* Premium-locked tools */
+.pen-btn.premium-locked {
+  opacity: 0.35;
+  filter: grayscale(0.8);
+  cursor: pointer;
+}
+
+/* Color Grid */
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 7px;
+  padding: 4px;
+  place-items: center;
+}
+
+.color-option {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  /* Soft shadow to match the pens */
+  box-shadow:
+    1px 0 1.5px rgba(0, 0, 0, 0.25),
+    3px 0 8px rgba(0, 0, 0, 0.2);
+}
+
+@media (hover: hover) {
+  .color-option:hover {
+    transform: scale(1.1);
+  }
+}
+
+/* Selected: white ring inset just inside the coloured edge (the colour shows
+   through the 2px transparent border, so the inset shadow sits 2px in). */
+.color-option.selected {
+  box-shadow:
+    inset 0 0 0 2px #fff,
+    1px 0 1.5px rgba(0, 0, 0, 0.25),
+    3px 0 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Custom colour swatch: crisp rainbow ring around the picked colour */
+.color-grid:has(> .color-picker-swatch:only-child) {
+  display: flex;
+}
+
+.color-option.color-picker-swatch {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  isolation: isolate;
+}
+.color-option.color-picker-swatch::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(#ff3b30, #ff9500, #ffcc00, #34c759, #00c7be, #007aff, #5856d6, #af52de, #ff2d55, #ff3b30);
+  z-index: -1;
+}
+.color-option.color-picker-swatch::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--picked, #ff9500);
+  pointer-events: none;
+}
+.color-option.color-picker-swatch,
+.color-option.color-picker-swatch.selected {
+  box-shadow: none;
+}
+.color-option.color-picker-swatch.selected::after {
+  box-shadow: 0 0 0 1.5px #fff;
+}
+.color-option.color-picker-swatch,
+.color-option.color-picker-swatch:hover {
+  transform: none;
+}
+
+.color-option.color-picker-swatch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  padding: 0;
+}
+
+/* Navigation + Pen Group */
+.nav-pen-group {
+  /* Its padding (which keeps pen tips unclipped) sticks out past the rotated sidebar —
+     don't let that invisible area swallow drawing clicks; only the pens themselves are clickable. */
+  pointer-events: none;
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  min-width: 0;
+  overflow: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* Expand the box so overflow-y clipping doesn't cut pen tips */
+  padding-top: 100px;
+  margin-top: -100px;
+  padding-bottom: 20px;
+  margin-bottom: -20px;
+}
+
+.nav-pen-group::-webkit-scrollbar {
+  display: none;
+}
+
+.arrow-group {
+  display: flex;
+  gap: 8px;
+  /* Pull arrows closer */
+  margin-bottom: 24px;
+}
+
+/* Eraser and Navigation Buttons */
+.nav-btn {
+  width: 28px;
+  height: 28px;
+  color: #8e8e93;
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-radius: 50%;
+  transition: opacity 0.2s ease;
+}
+
+.nav-btn.disabled {
+  pointer-events: none;
+}
+
+.nav-btn.disabled svg {
+  opacity: 0.25;
+}
+
+.eraser-btn {
+  width: 40px;
+  height: 40px;
+  color: #3c3c43;
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-radius: 50%;
+}
+
+@media (hover: hover) {
+
+  .nav-btn:hover,
+  .eraser-btn:hover {
+    color: #3c3c43;
+    background: rgba(0, 0, 0, 0.1) !important;
+  }
+}
+
+.eraser-btn.active {
+  background: rgba(0, 0, 0, 0.15) !important;
+  color: #1c1c1e;
+}
+
+.nav-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.eraser-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-btn+.nav-btn {
+  margin-left: 0;
+}
+
+/* Close Button */
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #3c3c43;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+@media (hover: hover) {
+  .close-btn:hover {
+    background: rgba(255, 255, 255, 0.95);
+    transform: scale(1.05);
+  }
+}
+
+.close-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Ink Pill Slider */
+.ink-pill {
+  position: absolute;
+  top: 50%;
+  left: 20px;
+  /* Moved to Left */
+  transform: translateY(-50%) scale(0.9);
+  width: 44px;
+  height: 135px;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  z-index: 20;
+  border-radius: 999px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  z-index: 100;
+  opacity: 0;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease,
+    width 0.3s ease,
+    padding 0.3s ease,
+    background 0.3s ease;
+  pointer-events: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.ink-pill.visible {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+.ink-pill.pulsing {
+  animation: ink-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ink-pulse {
+
+  0%,
+  100% {
+    transform: translateY(-50%) scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: translateY(-50%) scale(1.06);
+    opacity: 0.7;
+  }
+}
+
+.ink-pill.refund-pulse {
+  animation: ink-refund-pulse 0.8s ease-out;
+}
+
+@keyframes ink-refund-pulse {
+  0% {
+    transform: translateY(-50%) scale(1);
+  }
+
+  30% {
+    transform: translateY(-50%) scale(1.1);
+  }
+
+  100% {
+    transform: translateY(-50%) scale(1);
+  }
+}
+
+.ink-pill.drawing {
+  width: 8px;
+  height: 135px;
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border-radius: 999px;
+}
+
+.ink-pill.drawing .ink-icon {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ink-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.15);
+  /* Track background */
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.ink-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  /* Slightly transparent fill */
+  transition: background-color 0.3s ease;
+  will-change: height;
+}
+
+.ink-fill.refunding {
+  transition: background-color 0.3s ease, height 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ink-icon {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.9;
+  transition: opacity 0.2s ease;
+}
+
+/* Ink Depleted Toast */
+.ink-toast {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100%);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(220, 220, 220, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 0.5s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.4s ease;
+  white-space: nowrap;
+}
+
+.ink-toast.visible {
+  transform: translateX(-50%) translateY(calc(env(safe-area-inset-top, 0px) + 16px));
+  opacity: 1;
+}
+
+.ink-toast-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ink-toast-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+}
+
+.ink-toast-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c1c1e;
+  letter-spacing: -0.2px;
+}
+
+.ink-toast-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(28, 28, 30, 0.5);
+  letter-spacing: -0.1px;
+}
+
+/* Report Button */
+.report-btn {
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(220, 220, 220, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: none;
+  border-radius: 999px;
+  color: #ff3b30;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  transform: translateX(-50%);
+  opacity: 0;
+}
+
+.report-btn.report-btn-enter {
+  animation: report-fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.report-btn.report-btn-exit {
+  animation: report-fade-out 0.2s ease forwards;
+}
+
+@media (hover: hover) {
+  .report-btn:hover {
+    transform: translateX(-50%) scale(1.05);
+    background: rgba(220, 220, 220, 0.75);
+  }
+}
+
+.report-btn:active {
+  transform: translateX(-50%) scale(0.95);
+}
+
+@keyframes report-fade-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.5) translateY(8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1) translateY(0);
+  }
+}
+
+@keyframes report-fade-out {
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1) translateY(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.8) translateY(4px);
+  }
+}
+
+/* Loading Overlay & Spinner */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  pointer-events: none;
+}
+
+.spinner {
+  font-size: 32px;
+  width: 1em;
+  height: 1em;
+  position: relative;
+}
+
+.spinner-blade {
+  position: absolute;
+  left: 0.4629em;
+  bottom: 0;
+  width: 0.074em;
+  height: 0.2777em;
+  border-radius: 0.0555em;
+  background-color: transparent;
+  transform-origin: center -0.2222em;
+  animation: spinner-fade 1s infinite linear;
+}
+
+.spinner-blade:nth-child(1) {
+  animation-delay: 0s;
+  transform: rotate(0deg);
+}
+
+.spinner-blade:nth-child(2) {
+  animation-delay: 0.083s;
+  transform: rotate(30deg);
+}
+
+.spinner-blade:nth-child(3) {
+  animation-delay: 0.166s;
+  transform: rotate(60deg);
+}
+
+.spinner-blade:nth-child(4) {
+  animation-delay: 0.249s;
+  transform: rotate(90deg);
+}
+
+.spinner-blade:nth-child(5) {
+  animation-delay: 0.332s;
+  transform: rotate(120deg);
+}
+
+.spinner-blade:nth-child(6) {
+  animation-delay: 0.415s;
+  transform: rotate(150deg);
+}
+
+.spinner-blade:nth-child(7) {
+  animation-delay: 0.498s;
+  transform: rotate(180deg);
+}
+
+.spinner-blade:nth-child(8) {
+  animation-delay: 0.581s;
+  transform: rotate(210deg);
+}
+
+.spinner-blade:nth-child(9) {
+  animation-delay: 0.664s;
+  transform: rotate(240deg);
+}
+
+.spinner-blade:nth-child(10) {
+  animation-delay: 0.747s;
+  transform: rotate(270deg);
+}
+
+.spinner-blade:nth-child(11) {
+  animation-delay: 0.83s;
+  transform: rotate(300deg);
+}
+
+.spinner-blade:nth-child(12) {
+  animation-delay: 0.913s;
+  transform: rotate(330deg);
+}
+
+/* Sidebar */
+.sidebar-panel {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.sidebar-panel::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar-row {
+  transition: background 0.15s ease;
+}
+
+@media (hover: hover) {
+  .sidebar-row:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+  }
+}
+
+@keyframes spinner-fade {
+  0% {
+    background-color: rgba(255, 255, 255, 0.85);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes plusSheetScrimIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes plusSheetScrimOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes plusSheetSlideUp {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes plusSheetSlideDown {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(100%);
+  }
+}
+
+/* Desktop: centered dialog instead of bottom sheet */
+@keyframes sheetScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes sheetScaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+@media (min-width: 600px) {
+  .sheet-dialog {
+    bottom: auto !important;
+    top: 50% !important;
+    left: 50% !important;
+    right: auto !important;
+    transform: translate(-50%, -50%) !important;
+    border-radius: 32px !important;
+    max-height: calc(100vh - 80px);
+    height: fit-content;
+    overflow-y: auto;
+    padding-bottom: 0 !important;
+    width: 420px;
+  }
+
+  .sheet-dialog.sheet-entering {
+    animation: sheetScaleIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  }
+
+  .sheet-dialog.sheet-leaving {
+    animation: sheetScaleOut 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  }
+
+  .sheet-dialog .sheet-drag-handle {
+    display: none;
+  }
+}
+
+@keyframes rainbowSlide {
+  from {
+    transform: translate(0, 0);
+  }
+
+  to {
+    transform: translate(-512px, -512px);
+  }
+}
+
+.color-option.rainbow-swatch {
+  overflow: hidden;
+  position: relative;
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent;
+}
+
+.color-option.rainbow-swatch.selected::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 2px #fff;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.color-option.rainbow-swatch .rainbow-fill {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  z-index: 0;
+  background:
+    conic-gradient(#ff3b30,
+      #ff6a1e,
+      #ff9500,
+      #ffb300,
+      #ffcc00,
+      #9acd32,
+      #34c759,
+      #1aa3a3,
+      #007aff,
+      #2c68ea,
+      #5856d6,
+      #8454da,
+      #af52de,
+      #d946a8,
+      #ff3b30),
+    linear-gradient(135deg,
+      #ff3b30,
+      #ff9500,
+      #ffcc00,
+      #34c759,
+      #007aff,
+      #5856d6,
+      #af52de,
+      #ff3b30,
+      #ff9500,
+      #ffcc00,
+      #34c759,
+      #007aff,
+      #5856d6,
+      #af52de,
+      #ff3b30);
+  background-size:
+    100% 100%,
+    500% 500%;
+  background-blend-mode: overlay;
+  animation: rainbowFlow 6s ease infinite;
+  filter: blur(1px);
+  -webkit-filter: blur(1px);
+}
+
+@keyframes rainbowFlow {
+  0% {
+    background-position:
+      center,
+      0% 0%;
+  }
+
+  50% {
+    background-position:
+      center,
+      100% 100%;
+  }
+
+  100% {
+    background-position:
+      center,
+      0% 0%;
+  }
+}
+
+@keyframes rainbowTextFlow {
+  0% {
+    background-position: 0% 0%;
+  }
+
+  50% {
+    background-position: 100% 100%;
+  }
+
+  100% {
+    background-position: 0% 0%;
+  }
+}
+
+.ink-fill-rainbow {
+  animation: inkRainbowCycle 8s linear infinite !important;
+}
+
+@keyframes inkRainbowCycle {
+  0% {
+    background-color: #ff3b30;
+  }
+
+  14% {
+    background-color: #ff9500;
+  }
+
+  28% {
+    background-color: #ffcc00;
+  }
+
+  42% {
+    background-color: #34c759;
+  }
+
+  57% {
+    background-color: #007aff;
+  }
+
+  71% {
+    background-color: #5856d6;
+  }
+
+  85% {
+    background-color: #af52de;
+  }
+
+  100% {
+    background-color: #ff3b30;
+  }
+}
+/* Photo credit: one line, bottom right, Apple Maps legal-label style: a small rectangle of
+   even blur behind muted text. */
+.panorama-credit {
+  position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 21; display: flex; align-items: center; max-width: calc(100vw - 20px);
+  padding: 1px 4px; border-radius: 3px;
+  background: transparent; /* blur only, no tint */
+  backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  color: rgba(255, 255, 255, 0.88); font: 500 11px/1.2 -apple-system, system-ui, sans-serif;
+  white-space: nowrap;
+}
+.panorama-credit > * + *::before { content: '·'; display: inline-block; padding: 0 4px; opacity: 0.7; text-decoration: none; }
+.panorama-credit a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; }
+@media (hover: hover) { .panorama-credit a:hover { color: #fff; text-decoration: underline; text-underline-offset: 2px; } }
+.panorama-error { position: absolute; inset: 0; z-index: 10001; background: #18251de8; color: white; display: flex; gap: 18px; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.panorama-error a { color: white; }
+.panorama-error button { padding: 10px 20px; border-radius: 24px; border: 0; cursor: pointer; }
+.panorama-unavailable { height: 100%; padding: 30px; display: flex; gap: 20px; flex-direction: column; align-items: center; justify-content: center; background: #f8f7f3; color: #253f30; text-align: center; }
+.panorama-unavailable a { color: inherit; }
+
+/* ══ Dark appearance (matches the Explore map UI + PencilKit's dark palette) ══════════════ */
+.app--dark .toolbar::before {
+  background: rgba(30, 31, 29, 0.76);
+  backdrop-filter: blur(30px) saturate(1.5);
+  -webkit-backdrop-filter: blur(30px) saturate(1.5);
+  box-shadow:
+    0 -0.5px 0 rgba(255, 255, 255, 0.09),
+    0 -6px 20px rgba(0, 0, 0, 0.25);
+}
+@media (hover: hover) {
+  .app--dark .sidebar-icon-btn:not(:disabled):hover { background: rgba(255, 255, 255, 0.1); }
+}
+/* the PencilKit eraser image is drawn like the other pens (same size + travel) */
+.app--dark .pen-btn.eraser .pen-tip { width: 48px; height: 130px; }
+.app--dark .pen-btn.eraser { transform: translateY(70px); }
+.app--dark .pen-btn.eraser.active { transform: translateY(50px); }
+@media (hover: hover) {
+  .app--dark .pen-btn.eraser:hover { transform: translateY(63px); }
+  .app--dark .pen-btn.eraser.active:hover { transform: translateY(50px); }
+}
+/* dark pens on dark glass: a slightly stronger contact shadow keeps their edges readable */
+.app--dark .pen-tip { filter: drop-shadow(1px 0 0.6px rgba(0, 0, 0, 0.45)) drop-shadow(3px 0 6px rgba(0, 0, 0, 0.3)); }
+.app--dark .pen-btn.active .pen-tip { filter: drop-shadow(1px 0 0.8px rgba(0, 0, 0, 0.45)) drop-shadow(5px 0 9px rgba(0, 0, 0, 0.35)); }
+.app--dark .report-btn { background: rgba(30, 31, 29, 0.82); box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 2px 10px rgba(0, 0, 0, 0.3); }
+@media (hover: hover) {
+  .app--dark .report-btn:hover { background: rgba(44, 44, 46, 0.88); }
+}
+.app--dark .tool-btn { color: rgba(235, 235, 245, 0.8); }
+.app--dark .tool-btn.active { background: rgba(255, 255, 255, 0.15); color: #fff; }
+
+/* Undo/redo as round buttons (PencilKit dark palette style): grey fill disc, white glyph;
+   when unavailable the disc stays and only the glyph dims. */
+.app--dark .sidebar-icon-btn {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50%;
+  background: rgba(118, 118, 128, 0.26);
+}
+.app--dark .sidebar-icon-btn + .sidebar-icon-btn { margin-left: 8px; }
+.app--dark .sidebar-icon-btn svg { width: 18px; height: 18px; transition: opacity 0.2s ease; }
+.app--dark .sidebar-icon-btn:disabled { opacity: 1 !important; }
+.app--dark .sidebar-icon-btn:disabled svg { opacity: 0.35; }
+@media (hover: hover) {
+  .app--dark .sidebar-icon-btn:not(:disabled):hover { background: rgba(118, 118, 128, 0.4); }
+}
+.app--dark .sidebar-icon-btn:not(:disabled):active { background: rgba(118, 118, 128, 0.5); }
+
+/* ══ Phones: tools in a full-width strip along the bottom edge ═════════════════════════════
+   The desktop sidebar is the horizontal bar rotated 90°; here it's laid out unrotated along
+   the bottom, pens rising out of the screen edge. Pens scroll sideways and fade out under the colour picker when they don't fit
+   (fade masks set from JS). Undo/redo stay top-left as their own floating buttons. */
+@media (max-width: 599px) {
+  .toolbar,
+  .toolbar.toolbar--native {
+    /* full-width strip on the bottom edge — the desktop sidebar, laid along the bottom */
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* same enlarged pens/swatches as desktop (left/right 0 keep it full width under zoom) */
+    zoom: var(--toolbar-scale);
+    transform: none;
+    width: auto;
+    max-width: none;
+    /* pens + colours as one centred group (pens still scroll/fade when the screen is narrow) */
+    justify-content: center;
+    gap: 0;
+    padding: 15px 14px calc(15px + env(safe-area-inset-bottom, 0px));
+    /* !important: useSquircle writes border-radius 0 / overflow visible inline */
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    background: rgba(226, 226, 231, 0.78);
+    backdrop-filter: blur(18px) saturate(1.3);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    box-shadow: 0 -0.5px 0 rgba(0, 0, 0, 0.1), 0 -6px 20px rgba(0, 0, 0, 0.08);
+  }
+  .toolbar::before { display: none; }
+  .app--dark .toolbar {
+    background: rgba(30, 31, 29, 0.76);
+    backdrop-filter: blur(30px) saturate(1.5);
+    -webkit-backdrop-filter: blur(30px) saturate(1.5);
+    box-shadow: 0 -0.5px 0 rgba(255, 255, 255, 0.09), 0 -6px 20px rgba(0, 0, 0, 0.25);
+  }
+  /* sideways-scrolling pen strip */
+  .nav-pen-group {
+    pointer-events: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+  }
+  .pen-container { margin-left: 4px; padding-right: 2px; }
+  /* colour picker sits right after the pens (same spacing as between two pens) */
+  .tool-group { padding-left: 10px; }
+  /* shadows fall downwards now (the desktop ones are written for the rotated bar) */
+  .pen-tip,
+  .app--dark .pen-tip { filter: drop-shadow(0 0 0.6px rgba(0, 0, 0, 0.35)) drop-shadow(0 -1px 5px rgba(0, 0, 0, 0.22)); }
+  .pen-btn.active .pen-tip,
+  .app--dark .pen-btn.active .pen-tip { filter: drop-shadow(0 0 0.8px rgba(0, 0, 0, 0.35)) drop-shadow(0 -2px 8px rgba(0, 0, 0, 0.28)); }
+  .color-option { box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.25), 0 3px 8px rgba(0, 0, 0, 0.2); }
+  .color-option.selected { box-shadow: inset 0 0 0 2px #fff, 0 1px 1.5px rgba(0, 0, 0, 0.25), 0 3px 8px rgba(0, 0, 0, 0.2); }
+  /* undo/redo float over the photo on their own: same 40px disc as the close (x) button */
+  .app .sidebar-icon-btn { width: 40px !important; height: 40px !important; }
+  .app .sidebar-icon-btn svg { width: 20px; height: 20px; }
+  /* undo/redo float over the photo on their own: give them the glass so they read on any image */
+  .app--dark .sidebar-icon-btn {
+    background: rgba(30, 31, 29, 0.72);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 4px 14px rgba(0, 0, 0, 0.25);
+  }
+  .app:not(.app--dark) .sidebar-icon-btn {
+    background: rgba(226, 226, 231, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 50%;
+  }
+  /* the photo credit rests just above the drawing tools (--toolbar-h is measured in App.tsx) */
+  .panorama-credit { bottom: calc(var(--toolbar-h, 106px) + 6px); right: 14px; }
+  /* X mirrors the undo button's 14px inset on the other side */
+  .view-close { right: calc(14px + env(safe-area-inset-right, 0px)) !important; }
+}

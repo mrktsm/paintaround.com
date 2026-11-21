@@ -44,6 +44,17 @@ function SearchIcon({ size = 20, weight = 1.9 }: { size?: number; weight?: numbe
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={weight} strokeLinecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="M20 20l-4.6-4.6" /></svg>;
 }
 
+/** Big empty-state magnifier drawn like SF Symbols' magnifyingglass: a solid ring and a
+ *  shorter, heavier rounded handle (a thin outline scaled up looks like a wireframe). */
+function EmptySearchGlyph() {
+  return (
+    <svg width="54" height="54" viewBox="0 0 54 54" fill="none" stroke="currentColor" strokeLinecap="round" aria-hidden="true">
+      <circle cx="23" cy="23" r="14.5" strokeWidth="4.6" />
+      <path d="M34 34l10.5 10.5" strokeWidth="6.4" />
+    </svg>
+  );
+}
+
 function SearchPlaceRow({ loc, onOpen }: { loc: CardLocation; onOpen: (loc: CardLocation) => void }) {
   const [imageFailed, setImageFailed] = useState(false);
   return (
@@ -608,7 +619,7 @@ export default function ExplorePage() {
         {visibleSearchPlaces.map(loc => <SearchPlaceRow key={loc.id} loc={loc} onOpen={openSearchPlace} />)}
       </ul>
     </> : <div className="ex-search-empty">
-      <SearchIcon size={64} weight={1.3} />
+      <EmptySearchGlyph />
       <h2>{searchTerm ? 'No Places Found' : 'No Recent Searches'}</h2>
       <p>{searchTerm ? 'Try a different place or city.' : 'Your recent searches will appear here.'}</p>
     </div>}
@@ -871,18 +882,16 @@ export default function ExplorePage() {
                   {IS_SATELLITE && SATELLITE_SOURCE === 'eox' ? <><a href="https://cloudless.eox.at" target="_blank" rel="noreferrer">EOxCloudless</a> by <a href="https://eox.at" target="_blank" rel="noreferrer">EOX IT Services GmbH</a> (contains modified Copernicus Sentinel data 2024), <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a>. Overlay rendering © EOX and MapServer.</> : IS_SATELLITE && SATELLITE_SOURCE === 'esri' ? <>{ESRI_DATA_CREDIT}</> : IS_SATELLITE && SATELLITE_SOURCE === 'maptiler' ? <>© <a href="https://www.maptiler.com/copyright/" target="_blank" rel="noreferrer">MapTiler</a></> : IS_SATELLITE ? <>Imagery © CNES, Airbus DS, PlanetObserver · © <a href="https://stadiamaps.com/" target="_blank" rel="noreferrer">Stadia Maps</a> · © OpenMapTiles</> : <>© <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a></>}
                   <br />© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors
                 </p>
-                <div className="ex-info__links">
-                  <a href="/privacy">Privacy</a>
-                  <a href="/terms">Terms</a>
-                </div>
               </div>
             )}
-            {/* one small label, like Apple Maps' legal links: "Imagery" (or "Map data") opens the
-                credits panel above, which carries Esri's required "Powered by Esri" + the sources */}
+            {/* one small line, like Apple Maps' legal links: "© Esri" opens the credits panel above
+                (Esri's required "Powered by Esri" + every source); Privacy and Terms sit beside it */}
             <div className="ex-credit">
-              <button aria-label="Map data credits" aria-expanded={creditOpen} onClick={() => setCreditOpen((v) => !v)}>
-                {IS_SATELLITE ? 'Imagery' : 'Map data'}
+              <button aria-label="Map credits" aria-expanded={creditOpen} onClick={() => setCreditOpen((v) => !v)}>
+                {IS_SATELLITE && SATELLITE_SOURCE === 'esri' ? '© Esri' : 'Map data'}
               </button>
+              <a href="/privacy">Privacy</a>
+              <a href="/terms">Terms</a>
             </div>
           </div>
           <div className="ex-stack">

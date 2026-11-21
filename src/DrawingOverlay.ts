@@ -629,6 +629,49 @@ class Brush {
   }
 }
 
+// ── Pencil grain: real scanned paper (David Revoy, CC0) as the graphite's tooth ──
+type PencilLook = { src: string; scale: number; lo: number; hi: number; floor: number; width: number };
+/** Bold graphite on speckled drawing paper (chosen over softer/fibre variants, Nov 2026). */
+const PENCIL_LOOK: PencilLook = { src: "/textures/paper-grain.png", scale: 0.35, lo: 0.3, hi: 0.7, floor: 0.12, width: 1.0 };
+function pencilLook(): PencilLook {
+  return PENCIL_LOOK;
+}
+const _grainMasks = new Map<string, HTMLCanvasElement | null>();
+/** The look's grain as an alpha mask pattern (null until the texture has loaded). */
+function pencilGrain(ctx: CanvasRenderingContext2D, look: PencilLook): CanvasPattern | null {
+  const key = `${look.src}|${look.lo}|${look.hi}|${look.floor}`;
+  if (!_grainMasks.has(key)) {
+    _grainMasks.set(key, null);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext("2d", { willReadFrequently: true })!;
+      g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, c.width, c.height);
+      for (let i = 0; i < d.data.length; i += 4) {
+        // bright = paper peak = graphite catches; dark = valley = paper shows through
+        const v = d.data[i] / 255;
+        const t = Math.min(1, Math.max(0, (v - look.lo) / (look.hi - look.lo)));
+        d.data[i] = d.data[i + 1] = d.data[i + 2] = 255;
+        d.data[i + 3] = Math.round(255 * (look.floor + (1 - look.floor) * t * t * (3 - 2 * t)));
+      }
+      g.putImageData(d, 0, 0);
+      _grainMasks.set(key, c);
+    };
+    img.src = look.src;
+  }
+  const mask = _grainMasks.get(key);
+  if (!mask) return null;
+  const pat = ctx.createPattern(mask, "repeat");
+  if (!pat) return null;
+  // patterns are anchored to user space at fill time, i.e. drawing-space 0,0 (the surface
+  // decal), so the grain stays put under the pen
+  pat.setTransform(new DOMMatrix([look.scale, 0, 0, look.scale, 0, 0]));
+  return pat;
+}
+
 class Pen {
   basicX: number = 0;
   basicY: number = 0;
@@ -645,16 +688,8 @@ class Pen {
   private _unprojector: Unprojector;
   private _initialized: boolean = false;
   private _history: { basicX: number; basicY: number; width: number }[] = [];
-  private _seed: number = Math.floor(Math.random() * 2147483647);
-  setSeed(seed: number): void {
-    this._seed = seed;
-    this._cachedDrawable = null;
-  }
-  private _cachedDrawable: ReturnType<
-    ReturnType<typeof rough.generator>["curve"]
-  > | null = null;
-  private _cachedPointCount: number = 0;
-  private _generator = rough.generator();
+  private _off: HTMLCanvasElement | null = null;
+  setSeed(_seed: number): void {} // no randomness: the grain is fixed to the surface
 
   minX: number = Infinity;
   minY: number = Infinity;
@@ -777,26 +812,43 @@ class Pen {
         const isDefaultColor =
           this.color === "#000000" || this.color === "black";
         const strokeColor = isDefaultColor ? "#333333" : this.color;
-        const baseWidth = this._history[0].width * fovScale;
-
-        const needsRegenerate =
-          !this._cachedDrawable ||
-          validPoints.length !== this._cachedPointCount;
-
-        if (needsRegenerate) {
-          this._cachedDrawable = this._generator.curve(validPoints, {
-            stroke: strokeColor,
-            strokeWidth: baseWidth * 0.6,
-            roughness: 1.2,
-            bowing: 1,
-            seed: this._seed,
-          });
-          this._cachedPointCount = validPoints.length;
+        const look = pencilLook();
+        // Graphite: a steady line (width follows speed: slow = fuller), then masked by real paper
+        // grain so the colour only catches on the paper's tooth. The grain is anchored to the
+        // drawing space (the surface decal), so it never slides with the pen.
+        const pts: [number, number, number][] = [];
+        projectedPoints.forEach((p, i) => {
+          if (p) pts.push([p[0], p[1], this._history[i].width * fovScale * look.width]);
+        });
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const [x, y, w] of pts) {
+          x0 = Math.min(x0, x - w); y0 = Math.min(y0, y - w);
+          x1 = Math.max(x1, x + w); y1 = Math.max(y1, y + w);
         }
-
-        const rc = rough.canvas(ctx.canvas);
-        if (this._cachedDrawable) {
-          rc.draw(this._cachedDrawable);
+        x0 = Math.floor(x0 - 2); y0 = Math.floor(y0 - 2);
+        const w = Math.ceil(x1 + 2) - x0, h = Math.ceil(y1 + 2) - y0;
+        if (w > 0 && h > 0 && w < 8192 && h < 8192) {
+          const off = (this._off ??= document.createElement("canvas"));
+          off.width = w;
+          off.height = h;
+          const o = off.getContext("2d")!;
+          o.translate(-x0, -y0);
+          o.strokeStyle = strokeColor;
+          o.lineCap = o.lineJoin = "round";
+          for (let i = 1; i < pts.length; i++) {
+            o.lineWidth = (pts[i - 1][2] + pts[i][2]) / 2;
+            o.beginPath();
+            o.moveTo(pts[i - 1][0], pts[i - 1][1]);
+            o.lineTo(pts[i][0], pts[i][1]);
+            o.stroke();
+          }
+          const grain = pencilGrain(o, look);
+          if (grain) {
+            o.globalCompositeOperation = "destination-in";
+            o.fillStyle = grain;
+            o.fillRect(x0, y0, w, h);
+          }
+          ctx.drawImage(off, x0, y0);
         }
       }
     }
@@ -843,8 +895,6 @@ class Pen {
   /** Update the pen color and invalidate the rough.js cached drawable. */
   updateColor(newColor: string): void {
     this.color = newColor;
-    this._cachedDrawable = null;
-    this._cachedPointCount = 0;
   }
 }
 

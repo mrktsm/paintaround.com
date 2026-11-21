@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { START_ZOOM } from '../../src/pool/startView.ts';
 
 // Normal camera views, expressed in the original panorama's basic coordinates.
 // Pixels in the full panorama are never changed; these are separate card images.
@@ -61,7 +62,9 @@ async function renderPanoramaProjection(input, output, view) {
 // desktop or phone viewport. The regular card composition stays unchanged.
 export async function renderPanoramaLoadingPreview(input, output, id, center = {}) {
   const width = 1920, height = 480;
-  const view = { ...thumbnailViewFor(id), u: center.u ?? thumbnailViewFor(id).u, v: center.v ?? thumbnailViewFor(id).v, width, height, horizontalFov: 2 * Math.atan(width / height) * 180 / Math.PI };
+  // The viewer opens at START_ZOOM: tan(fov / 2) shrinks by 2^zoom from the widest view.
+  const scale = 2 ** START_ZOOM;
+  const view = { ...thumbnailViewFor(id), u: center.u ?? thumbnailViewFor(id).u, v: center.v ?? thumbnailViewFor(id).v, width, height, horizontalFov: 2 * Math.atan(width / height / scale) * 180 / Math.PI };
   return renderPanoramaProjection(input, output, view);
 }
 

@@ -51,8 +51,11 @@ export type ClientMessage =
   | ({ t: 'cursor' } & CursorState)
   | { t: 'cursor_hide' }
   /** group: pieces of one stroke that cross surfaces share it, so the live line continues */
-  | { t: 'stroke_start'; color: string; lineWidth: number; toolType: ToolType; u: number; v: number; fov: number; group?: number }
-  | { t: 'stroke_point'; u: number; v: number }
+  /** seed + wpp (world units per decal px) are set for strokes painted on a 3D surface: with them
+   *  everyone else replays the stroke with the same brush and gets exactly the drawer's pixels */
+  | { t: 'stroke_start'; color: string; lineWidth: number; toolType: ToolType; u: number; v: number; fov: number; group?: number; seed?: number; wpp?: number }
+  /** pts: the brush's own samples since the last message, flat [u, v, decalX, decalY, ...] */
+  | { t: 'stroke_point'; u: number; v: number; pts?: number[] }
   | { t: 'stroke_end' }
   | { t: 'stroke_done'; stroke: FinishedStroke }
   | { t: 'erase'; ids: string[] };

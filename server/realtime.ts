@@ -14,7 +14,7 @@ const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS ??
-    'https://draw.markotsymbaluk.com,https://washere.live,https://www.washere.live,http://server.example,http://localhost:5173,http://127.0.0.1:5173')
+    'https://paintaround.com,https://www.paintaround.com,https://draw.markotsymbaluk.com,https://washere.live,https://www.washere.live,http://server.example,http://localhost:5173,http://127.0.0.1:5173')
     .split(',').map(s => s.trim()).filter(Boolean),
 );
 
@@ -134,10 +134,16 @@ function handle(c: Client, raw: string) {
         broadcast(room, c, {
           t: 'stroke_start', color: m.color, lineWidth: m.lineWidth, toolType: m.toolType, u: m.u, v: m.v, fov: m.fov, from,
           ...(isNum(m.group) ? { group: m.group } : {}),
+          ...(Number.isInteger(m.seed) && isNum(m.seed, 0, 2 ** 32) ? { seed: m.seed } : {}),
+          ...(isNum(m.wpp, 1e-9, 1e6) ? { wpp: m.wpp } : {}),
         });
       return;
     case 'stroke_point':
-      if (isUV(m)) broadcast(room, c, { t: 'stroke_point', u: m.u, v: m.v, from });
+      if (isUV(m)) {
+        const pts = Array.isArray(m.pts) && m.pts.length <= 4 * 128 && m.pts.length % 4 === 0
+          && m.pts.every(x => isNum(x, -1e5, 1e5)) ? m.pts : undefined;
+        broadcast(room, c, { t: 'stroke_point', u: m.u, v: m.v, ...(pts ? { pts } : {}), from });
+      }
       return;
     case 'stroke_done': {
       if (!validStroke(m.stroke)) return;

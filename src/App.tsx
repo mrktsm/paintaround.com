@@ -28,6 +28,7 @@ const STROKE_ACTIONS = false;
 const toolBase = (name: string) => `/tools/${name}-base${DARK_UI ? '-dark' : ''}.png`;
 import { loadDeepData } from './deep/surfaceDecal';
 import CloseIcon from './components/CloseIcon';
+import { START_ZOOM } from './pool/startView';
 
 /** No accounts: admin powers (unlimited ink, delete any drawing) exist only when running locally. */
 const IS_ADMIN = import.meta.env.DEV;
@@ -50,6 +51,7 @@ const BRUSH_CURSOR_RADIUS: Record<string, number> = {
   crayon: 12,
   fountainPen: 3,
   watercolor: 5,
+  eraser: 12,
 };
 
 const COLORS = [
@@ -484,8 +486,12 @@ function App({ panorama }: { panorama: Panorama }) {
     let renderReady = false;
     const reveal = () => {
       if (disposed || !cameraReady || !renderReady || revealFrame !== undefined) return;
-      revealFrame = requestAnimationFrame(() => { if (!disposed) setIsLoaded(true); });
+      revealFrame = requestAnimationFrame(() => {
+        if (disposed) return;
+        setIsLoaded(true);
+      });
     };
+
     if (containerRef.current && !viewerRef.current) {
       // Start depth/material loading alongside the photo. The view can reveal
       // immediately; drawing waits until its lighting is available.
@@ -546,6 +552,7 @@ function App({ panorama }: { panorama: Panorama }) {
       void viewerRef.current.moveTo(imageId).then(() => {
         if (disposed || !viewerRef.current || !containerRef.current) return;
         viewerRef.current.setCenter([panorama.thumbnailView?.u ?? 0.75, panorama.thumbnailView?.v ?? 0.5]);
+        viewerRef.current.setZoom(START_ZOOM); // same camera the loading preview was rendered with
         // Reveal after the matching camera is applied, avoiding a flash of the
         // viewer's default direction or zoom before it settles on the preview.
         cameraReady = true;
@@ -995,7 +1002,8 @@ function App({ panorama }: { panorama: Panorama }) {
     }
 
     if (activeTool === 'eraser') {
-      drawingOverlayRef.current.eraseAt(pos.x, pos.y);
+      if (e.pointerType !== 'mouse') drawingOverlayRef.current.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS.eraser, true);
+      drawingOverlayRef.current.eraseAt(pos.x, pos.y, BRUSH_CURSOR_RADIUS.eraser);
     } else if (e.pointerType === 'touch') {
       // Touch: defer stroke start until finger moves (allows long-press to report)
       const lineWidth = activeTool === 'marker' ? 8 : 3;
@@ -1113,8 +1121,9 @@ function App({ panorama }: { panorama: Panorama }) {
     // Brush outline that wraps onto the surface under the mouse (not shown for touch / eraser).
     // While hovering it previews the paint colour inside, lit like the real stroke; while a
     // button is held the stroke itself is the preview, so the outline stays empty.
-    if (activeTool && activeTool !== 'eraser' && e.pointerType === 'mouse') {
-      const hoverColor = e.buttons === 0 && selectedColorRef.current !== 'rainbow' ? selectedColorRef.current : null;
+    if (activeTool && e.pointerType === 'mouse') {
+      // the eraser shows its ring too, just never filled with paint
+      const hoverColor = activeTool !== 'eraser' && e.buttons === 0 && selectedColorRef.current !== 'rainbow' ? selectedColorRef.current : null;
       drawingOverlayRef.current.updateBrushCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS[activeTool] ?? 4, hoverColor);
     } else {
       drawingOverlayRef.current.hideBrushCursor();
@@ -1148,7 +1157,8 @@ function App({ panorama }: { panorama: Panorama }) {
 
     if (activeTool === 'eraser') {
       if (e.buttons > 0) {
-        drawingOverlayRef.current.eraseAt(pos.x, pos.y);
+        if (e.pointerType !== 'mouse') drawingOverlayRef.current.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS.eraser);
+        drawingOverlayRef.current.eraseAt(pos.x, pos.y, BRUSH_CURSOR_RADIUS.eraser);
       }
       return;
     }
@@ -1293,6 +1303,8 @@ function App({ panorama }: { panorama: Panorama }) {
 
     if (activeTool === 'eraser' && drawingOverlayRef.current) {
       const fullRefund = drawingOverlayRef.current.finalizeEraser();
+      refreshUndoRedo();
+      if (e.pointerType !== 'mouse') drawingOverlayRef.current.shareCursorHide();
       const refund = fullRefund * 0.50; // Refund 50% of erased ink
       if (refund > 0) {
         const maxInk = tierRef.current.maxInk;

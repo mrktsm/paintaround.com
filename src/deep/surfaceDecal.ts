@@ -178,7 +178,7 @@ export class SurfaceDecal {
    * at the start point (each tool keeps its usual on-screen size where you start drawing).
    * Returns null where the surface is unusable (sky, too steep / grazing angle).
    */
-  static create(data: DeepData, u: number, v: number, radPerScreenPx: number, worldPerPx?: number): SurfaceDecal | null {
+  static create(data: DeepData, u: number, v: number, radPerScreenPx: number, worldPerPx?: number, exact = false): SurfaceDecal | null {
     if (v < 0.04 || v > 0.98) return null;
     const i = Math.floor(v * H), j = Math.floor(u * W);
     const P0 = pointAt(data, i, j);
@@ -202,7 +202,8 @@ export class SurfaceDecal {
     // (clamped to 1.5x of a fresh stroke's size, so a stroke going from a far wall onto the
     // nearby ground doesn't balloon into a blob, and vice versa)
     const fresh = d0 * radPerScreenPx;
-    const s = worldPerPx ? Math.min(fresh * 1.5, Math.max(fresh / 1.5, worldPerPx)) : fresh;
+    // exact: replaying someone else's stroke, use their scale as is
+    const s = worldPerPx && exact ? worldPerPx : worldPerPx ? Math.min(fresh * 1.5, Math.max(fresh / 1.5, worldPerPx)) : fresh;
     return new SurfaceDecal(data, P0, n, nSurf, t1, t2, s);
   }
 

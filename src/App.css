@@ -82,16 +82,11 @@ body {
   -webkit-touch-callout: none;
 }
 
-/* Drawing tools show their own brush-size circle (wrapped onto the surface), so hide the
-   system cursor. The eraser has no circle and keeps the crosshair. */
+/* Drawing tools (eraser included) show their own size circle, wrapped onto the surface, so
+   hide the system cursor. */
 .viewer-container.drawing-active,
 .viewer-container.drawing-active * {
   cursor: none !important;
-}
-
-.viewer-container.drawing-active.tool-eraser,
-.viewer-container.drawing-active.tool-eraser * {
-  cursor: crosshair !important;
 }
 
 .viewer-container.drawing-active.panning,

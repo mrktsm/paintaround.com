@@ -2443,6 +2443,16 @@ export class DrawingOverlay {
     realtime.join(imageId);
   }
 
+  /**
+   * Leaving the place: stop listening and leave its live room on the server. Without this the
+   * connection stayed in the room, so coming back to the same place was ignored as "already
+   * there" and its saved drawings never arrived until a reload.
+   */
+  leaveRealtime(): void {
+    this.unsubscribeFromRealtime();
+    realtime.leave();
+  }
+
   unsubscribeFromRealtime(): void {
     this._realtimeOff?.();
     this._realtimeOff = null;
@@ -6180,8 +6190,8 @@ export class DrawingOverlay {
     this.pendingTextures = [];
     this.pendingPenTextures = [];
 
-    // Clean up remote strokes
-    this.unsubscribeFromRealtime();
+    // Clean up remote strokes and leave the place's live room
+    this.leaveRealtime();
 
     // Clean up RxJS subscriptions
     for (const sub of this._internalSubs) {

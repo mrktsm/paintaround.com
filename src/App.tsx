@@ -406,7 +406,7 @@ function App({ panorama }: { panorama: Panorama }) {
 
     // Fade out drawing strokes before leaving
     if (drawingOverlayRef.current) {
-      drawingOverlayRef.current.unsubscribeFromRealtime();
+      drawingOverlayRef.current.leaveRealtime();
       drawingOverlayRef.current.fadeOut();
     }
 

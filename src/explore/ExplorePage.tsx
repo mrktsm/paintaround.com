@@ -576,7 +576,10 @@ export default function ExplorePage() {
         if (leavingTimer !== undefined) {
           clearTimeout(leavingTimer);
           leaving.delete(key);
-          pins.get(key)?.getElement().classList.add('is-shown');
+          const back = pins.get(key)?.getElement();
+          back?.classList.add('is-shown');
+          back?.style.removeProperty('pointer-events'); // tappable again
+          back?.querySelectorAll<HTMLElement>('.ex-pin__photo, .ex-pin__label').forEach(c => c.style.removeProperty('pointer-events'));
         }
         if (!pins.has(key)) {
           const el = makePin(rep, rep.title, openPin);
@@ -617,6 +620,7 @@ export default function ExplorePage() {
         }
         el.classList.remove('is-shown');
         el.style.pointerEvents = 'none';
+        el.querySelectorAll<HTMLElement>('.ex-pin__photo, .ex-pin__label').forEach(c => { c.style.pointerEvents = 'none'; });
         leaving.set(id, setTimeout(() => { mk.remove(); pins.delete(id); leaving.delete(id); }, PIN_FADE_MS));
       }
     };
@@ -625,7 +629,8 @@ export default function ExplorePage() {
     m.on('click', (e) => {
       if (m.getZoom() >= PHOTO_ZOOM) return;
       const refLng = m.unproject(e.point).lng;
-      let nearest: Loc | null = null, d = heatmapRadius(m.getZoom());
+      // the visible glow reaches a bit past the heatmap radius, so taps anywhere on it count
+      let nearest: Loc | null = null, d = heatmapRadius(m.getZoom()) * 1.5;
       for (const l of LOCATIONS) {
         const lng = l.lng + 360 * Math.round((refLng - l.lng) / 360);
         const p = m.project([lng, l.lat]);

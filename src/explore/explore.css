@@ -420,6 +420,10 @@
   background: none;
   cursor: pointer;
 }
+/* only the photo and the name text are tappable: the button itself is as wide as the label
+   column, and its empty sides covered the heat glow (taps there should zoom in) */
+.ex-pin { pointer-events: none; }
+.ex-pin__photo, .ex-pin__label { pointer-events: auto; }
 .ex-pin__photo {
   width: 62px;
   height: 62px;

@@ -127,9 +127,8 @@ body {
   /* Fallback for browsers without clip-path; true squircle applied via JS */
   z-index: 20;
   transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
-  /* The sidebar is drawn by ::before; no squircle clip on the bar itself */
+  /* desktop: floating squircle pill (clip-path written by useSquircle); phones turn it off */
   overflow: visible;
-  clip-path: none !important;
   /* Mask pens precisely at the rounded bottom */
   max-width: calc((100vh - 84px) / var(--toolbar-scale));
   box-sizing: border-box;
@@ -1274,6 +1273,7 @@ body {
     /* !important: useSquircle writes border-radius 0 / overflow visible inline */
     border-radius: 0 !important;
     overflow: hidden !important;
+    clip-path: none !important; /* full-width strip, not the desktop squircle */
     background: rgba(226, 226, 231, 0.78);
     backdrop-filter: blur(18px) saturate(1.3);
     -webkit-backdrop-filter: blur(18px) saturate(1.3);
@@ -1323,4 +1323,47 @@ body {
   .panorama-credit { bottom: calc(var(--toolbar-h, 106px) + 6px); right: 14px; }
   /* X mirrors the undo button's 14px inset on the other side */
   .view-close { right: calc(14px + env(safe-area-inset-right, 0px)) !important; }
+}
+
+/* ══ Desktop: tools (undo/redo at the top) in one floating panel, vertically centred on the left. ══════════════════════════════════════════════════ */
+@media (min-width: 600px) {
+  /* tools vertically centred on the left edge (local x = screen down, so -50% on x centres) */
+  .toolbar { top: 50%; transform: rotate(90deg) scale(var(--toolbar-scale)) translate(-50%, -100%); }
+  @supports (zoom: 1) {
+    .toolbar { top: calc(50vh / var(--toolbar-scale)); left: calc(14px / var(--toolbar-scale)); transform: rotate(90deg) translate(-50%, -100%); }
+  }
+  /* Floating pill (as before the sidebar): inset from the edge, frosted, pens rising out of its
+     edge and clipped by its rounded outline. */
+  /* rounded rectangle with the main menu's 14px corners; left edge lined up with undo/redo */
+  .toolbar { left: calc(14px / var(--toolbar-scale)); border-radius: calc(14px / var(--toolbar-scale)) !important; clip-path: none !important; overflow: hidden !important; background: rgba(226, 226, 231, 0.78); backdrop-filter: blur(18px) saturate(1.3); -webkit-backdrop-filter: blur(18px) saturate(1.3); }
+  /* tighter ends: ~14px from the rounded border to the first pen / colour dot (on screen) */
+  .toolbar { padding-left: 12px; padding-right: 12px; }
+  .toolbar .pen-container { margin-left: 0; }
+  .app--dark .toolbar { background: rgba(30, 31, 29, 0.76); backdrop-filter: blur(30px) saturate(1.5); -webkit-backdrop-filter: blur(30px) saturate(1.5); }
+  .toolbar::before, .app--dark .toolbar::before { display: none; }
+  /* Undo/redo live inside the top of the panel: the panel gets ~48px of extra room up top
+     (local padding-left = screen top), and the buttons are placed over it — centred in the
+     110px-wide panel, from its measured height (--toolbar-h, set in App.tsx). */
+  .toolbar { padding-left: calc(12px + 48px / var(--toolbar-scale)); }
+  .undo-redo {
+    top: calc(50vh - var(--toolbar-h, 400px) / 2 + 12px) !important;
+    left: calc(14px + (110px - 80px) / 2) !important;
+  }
+  .sidebar-icon-btn, .app--dark .sidebar-icon-btn {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(118, 118, 128, 0.26);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+  }
+  .sidebar-icon-btn + .sidebar-icon-btn { margin-left: 8px; }
+  .sidebar-icon-btn svg { width: 18px; height: 18px; }
+  .sidebar-icon-btn:disabled { opacity: 1 !important; }
+  .sidebar-icon-btn:disabled svg { opacity: 0.35; }
+  @media (hover: hover) {
+    .sidebar-icon-btn:not(:disabled):hover, .app--dark .sidebar-icon-btn:not(:disabled):hover { background: rgba(118, 118, 128, 0.42); }
+  }
 }

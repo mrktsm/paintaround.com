@@ -1496,8 +1496,9 @@ function App({ panorama }: { panorama: Panorama }) {
         pointerEvents: (!isLoaded || isStrokesLoading || showTutorial) ? 'none' : 'auto',
       }}>
 
-        {/* Undo / Redo Buttons */}
+        {/* Undo / Redo Buttons (on desktop they sit inside the top of the tool panel, see App.css) */}
         <div
+          className="undo-redo"
           style={{
             position: 'absolute',
             top: Capacitor.isNativePlatform() ? 'calc(4px + env(safe-area-inset-top, 0px))' : 'calc(20px + env(safe-area-inset-top, 0px))',

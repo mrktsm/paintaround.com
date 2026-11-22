@@ -796,7 +796,27 @@ export default function ExplorePage() {
               autoComplete="off"
               spellCheck={false}
               value={query}
-              onFocus={() => { setSearching(true); setDetent('full'); }}
+              // Phones: the browser scrolls the page to keep a focused field above the keyboard,
+              // measured while the sheet is still half open; the sheet then rises and that scroll
+              // pushed the field off screen. So: take over the tap, open the sheet fully and focus
+              // without scrolling (still inside the tap, so the keyboard opens), then undo any
+              // leftover page shift once the keyboard is up.
+              onPointerDown={(e) => {
+                if (detent === 'full' || document.activeElement === searchInput.current) return;
+                e.preventDefault();
+                setSearching(true);
+                setDetent('full');
+                searchInput.current?.focus({ preventScroll: true });
+              }}
+              onFocus={() => {
+                setSearching(true);
+                setDetent('full');
+                const unshift = () => { if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0); };
+                unshift();
+                window.visualViewport?.addEventListener('resize', unshift, { once: true });
+                setTimeout(unshift, 350);
+                setTimeout(unshift, 700);
+              }}
               onChange={event => { setQuery(event.target.value); panelScroll.current?.scrollTo({ top: 0 }); }}
             />
             {query && <button type="button" className="ex-search-clear" aria-label="Clear search" onClick={() => { setQuery(''); searchInput.current?.focus(); }}>

@@ -1307,3 +1307,19 @@ body {
     .sidebar-icon-btn:not(:disabled):hover, .app--dark .sidebar-icon-btn:not(:disabled):hover { background: rgba(118, 118, 128, 0.42); }
   }
 }
+
+/* ══ Phones: the bottom tool bar floats — inset from the edges with the desktop panel's 14px
+   corners (the bar is zoomed by --toolbar-scale, so its own lengths are divided by it);
+   undo/redo stay top-left. ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 599px) {
+  .toolbar, .toolbar.toolbar--native {
+    left: calc(12px / var(--toolbar-scale));
+    right: calc(12px / var(--toolbar-scale));
+    bottom: calc((12px + env(safe-area-inset-bottom, 0px)) / var(--toolbar-scale));
+    padding-bottom: 15px;
+    border-radius: calc(14px / var(--toolbar-scale)) !important;
+    box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.09), 0 8px 28px rgba(0, 0, 0, 0.3);
+  }
+  /* the photo credit rests just above the floating bar */
+  .panorama-credit { bottom: calc(var(--toolbar-h, 106px) + 12px + env(safe-area-inset-bottom, 0px) + 6px); }
+}

@@ -252,11 +252,22 @@ function App({ panorama }: { panorama: Panorama }) {
   useEffect(() => {
     const bar = toolbarRef.current;
     if (!bar || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      document.documentElement.style.setProperty('--toolbar-h', `${bar.getBoundingClientRect().height}px`);
-    });
+    // (desktop also places undo/redo from it.) Measure again once the bar's layout change has
+    // finished animating — switching between the phone strip and the desktop panel rotates it over
+    // 0.4s, and a mid-animation measurement left undo/redo halfway down the panel.
+    const measure = () => document.documentElement.style.setProperty('--toolbar-h', `${bar.getBoundingClientRect().height}px`);
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const measureSoon = () => { measure(); clearTimeout(settle); settle = setTimeout(measure, 450); };
+    const ro = new ResizeObserver(measureSoon);
     ro.observe(bar);
-    return () => ro.disconnect();
+    bar.addEventListener('transitionend', measure);
+    window.addEventListener('resize', measureSoon);
+    return () => {
+      ro.disconnect();
+      clearTimeout(settle);
+      bar.removeEventListener('transitionend', measure);
+      window.removeEventListener('resize', measureSoon);
+    };
   }, []);
 
   // Undo/Redo availability

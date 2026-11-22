@@ -61,10 +61,15 @@ jobs:
         run: SKIP_BUILD=1 DEPLOY_KEY=~/.ssh/deploy bash scripts/deploy.sh
       - name: Update live-drawing relay (restart only if it changed)
         run: |
-          # -c: compare contents (a fresh checkout gives every file a new timestamp)
-          changed=$(rsync -aic -e "ssh -i ~/.ssh/deploy" server shared "$HOST:/home/ubuntu/streetview-realtime/" | grep -v '^\.' || true)
+          # -c: compare contents (a fresh checkout gives every file a new timestamp); -R keeps the
+          # paths (the shared preview code imports src/pool/startView.ts)
+          changed=$(rsync -aicR -e "ssh -i ~/.ssh/deploy" server shared src/pool/startView.ts "$HOST:/home/ubuntu/streetview-realtime/" | grep -v '^\.' || true)
           if [ -n "$changed" ]; then
             echo "$changed"
+            # dependencies changed: install them (sharp for previews, ws)
+            if echo "$changed" | grep -q 'server/relay.package.json'; then
+              ssh -i ~/.ssh/deploy "$HOST" 'cd /home/ubuntu/streetview-realtime && cp server/relay.package.json package.json && PATH=/opt/node/bin:$PATH npm install --omit=dev --no-audit --no-fund'
+            fi
             ssh -i ~/.ssh/deploy "$HOST" 'sudo systemctl restart streetview-realtime && sleep 2 && systemctl is-active streetview-realtime'
           else
             echo "relay unchanged"
@@ -75,3 +80,7 @@ jobs:
           got=$(curl -fsS https://paintaround.com/ | grep -o 'assets/index-[^"]*\.js' | head -1)
           echo "built $want, live $got"
           [ "$want" = "$got" ]
+          # the panorama photos aren't in git: make sure the deploy brought them along
+          type=$(curl -fsS -o /dev/null -w '%{content_type}' https://paintaround.com/panorama-pool/ph-colosseum-card.jpg)
+          echo "photo check: $type"
+          [ "$type" = "image/jpeg" ]

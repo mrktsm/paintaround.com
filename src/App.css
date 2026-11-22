@@ -836,7 +836,9 @@ body {
 }
 
 .spinner {
-  font-size: 32px;
+  /* iOS UIActivityIndicatorView: 8 rounded spokes, ~20pt (medium) — a 32px, 12-blade
+     spinner read as oversized and old-style */
+  font-size: 22px;
   width: 1em;
   height: 1em;
   position: relative;
@@ -844,74 +846,17 @@ body {
 
 .spinner-blade {
   position: absolute;
-  left: 0.4629em;
-  bottom: 0;
-  width: 0.074em;
-  height: 0.2777em;
-  border-radius: 0.0555em;
-  background-color: transparent;
-  transform-origin: center -0.2222em;
-  animation: spinner-fade 1s infinite linear;
-}
-
-.spinner-blade:nth-child(1) {
-  animation-delay: 0s;
-  transform: rotate(0deg);
-}
-
-.spinner-blade:nth-child(2) {
-  animation-delay: 0.083s;
-  transform: rotate(30deg);
-}
-
-.spinner-blade:nth-child(3) {
-  animation-delay: 0.166s;
-  transform: rotate(60deg);
-}
-
-.spinner-blade:nth-child(4) {
-  animation-delay: 0.249s;
-  transform: rotate(90deg);
-}
-
-.spinner-blade:nth-child(5) {
-  animation-delay: 0.332s;
-  transform: rotate(120deg);
-}
-
-.spinner-blade:nth-child(6) {
-  animation-delay: 0.415s;
-  transform: rotate(150deg);
-}
-
-.spinner-blade:nth-child(7) {
-  animation-delay: 0.498s;
-  transform: rotate(180deg);
-}
-
-.spinner-blade:nth-child(8) {
-  animation-delay: 0.581s;
-  transform: rotate(210deg);
-}
-
-.spinner-blade:nth-child(9) {
-  animation-delay: 0.664s;
-  transform: rotate(240deg);
-}
-
-.spinner-blade:nth-child(10) {
-  animation-delay: 0.747s;
-  transform: rotate(270deg);
-}
-
-.spinner-blade:nth-child(11) {
-  animation-delay: 0.83s;
-  transform: rotate(300deg);
-}
-
-.spinner-blade:nth-child(12) {
-  animation-delay: 0.913s;
-  transform: rotate(330deg);
+  left: calc(50% - 0.05em);
+  top: 0;
+  width: 0.1em;
+  height: 0.28em;
+  border-radius: 0.05em;
+  background: rgba(255, 255, 255, 0.9);
+  transform-origin: 0.05em 0.5em;
+  transform: rotate(calc(var(--i) * 45deg));
+  /* each spoke dims to a floor (never vanishes) and the lit spoke steps around, like iOS */
+  animation: spinner-fade 0.8s steps(8, end) infinite;
+  animation-delay: calc(var(--i) * 0.1s - 0.8s);
 }
 
 /* Sidebar */
@@ -935,13 +880,8 @@ body {
 }
 
 @keyframes spinner-fade {
-  0% {
-    background-color: rgba(255, 255, 255, 0.85);
-  }
-
-  100% {
-    background-color: transparent;
-  }
+  0% { opacity: 1; }
+  100% { opacity: 0.22; }
 }
 
 @keyframes plusSheetScrimIn {

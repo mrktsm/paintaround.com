@@ -1801,8 +1801,8 @@ function App({ panorama }: { panorama: Panorama }) {
       {/* Loading Spinner Overlay */}
       {showLoadingSpinner && !isLoaded && !viewerError && <div className="loading-overlay" role="status" aria-label="Loading panorama">
         <div className="spinner">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="spinner-blade" />
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="spinner-blade" style={{ '--i': i } as React.CSSProperties} />
           ))}
         </div>
       </div>}

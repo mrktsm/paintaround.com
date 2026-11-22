@@ -272,6 +272,12 @@
   object-fit: cover;
 }
 .ex-card__ph { background: linear-gradient(135deg, #e3e3e8, #d1d1d6); }
+/* skeleton: the card's / thumbnail's own (dark) background shows while the photo loads, then
+   the photo fades in */
+.ex-fade-img { opacity: 0; transition: opacity 0.35s ease; }
+.ex-fade-img.is-loaded { opacity: 1; }
+.ex-card img { opacity: 0; transition: opacity 0.35s ease; }
+.ex-card img.is-loaded { opacity: 1; }
 .ex-card::after {
   content: '';
   position: absolute;
@@ -423,7 +429,9 @@
   background: #d8d8dc;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22), 0 6px 18px rgba(0, 0, 0, 0.12);
 }
-.ex-pin__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ex-pin__photo img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0; transition: opacity 0.35s ease; }
+.ex-pin__photo img.is-loaded { opacity: 1; }
+.ex--dark .ex-pin__photo { background: #2c2c2e; }
 .ex-pin__photo img:not([src]) { visibility: hidden; }
 .ex-pin__label {
   max-width: 160px;
@@ -440,9 +448,10 @@
    maplibre's transform and carries the zoom-based opacity, so animate inside it). */
 .ex-pin > * {
   opacity: 0;
-  transform: scale(0.82);
+  /* --fx/--fy: where it splits out of / merges into (another circle), else in place */
+  transform: translate(var(--fx, 0px), var(--fy, 0px)) scale(0.82);
   transform-origin: 50% 0;
-  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 0.3s ease, transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ex-pin.is-shown > * { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
@@ -475,6 +484,13 @@
   -webkit-backdrop-filter: var(--ex-header-glass);
   box-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.12);
 }
+/* switching area: only the text fades down and back up (see switchCity); the cards stay, so
+   each photo shows its dark placeholder and fades in by itself as it loads */
+.ex-panel__body .ex-card__text, .ex-panel__body .ex-sec { transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.ex-panel__body.is-swapping .ex-card__text, .ex-panel__body.is-swapping .ex-sec { opacity: 0; transform: translateY(6px); transition-duration: 0.16s; }
+/* the old photos clear at the start of the switch, so the new ones fill in over the placeholder */
+.ex-panel__body.is-swapping .ex-card img { opacity: 0; transition-duration: 0.12s; }
+@media (prefers-reduced-motion: reduce) { .ex-panel__body .ex-card__text, .ex-panel__body .ex-sec { transition: none; } }
 .ex-panel--search .ex-panel__body { flex: 1 0 auto; display: flex; flex-direction: column; }
 .ex-search-field {
   display: flex;

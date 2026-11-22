@@ -13,7 +13,7 @@ import Compass from '../components/Compass';
 import CloseIcon from '../components/CloseIcon';
 import { ESRI_DATA_CREDIT, ESRI_PREVIEW_STYLE, loadEsriHybridStyle } from './esriPreviewStyle';
 import { EOX_PREVIEW_STYLE } from './eoxPreviewStyle';
-import { heatmapRadius, photoPinOpacity, PHOTO_ZOOM, spotsHeatmapLayer } from './spotsHeatmap';
+import { heatmapRadius, PHOTO_ZOOM, spotsHeatmapLayer } from './spotsHeatmap';
 
 /**
  * Explore map interface, shared by the home page and /explore.
@@ -61,7 +61,7 @@ function SearchPlaceRow({ loc, onOpen }: { loc: CardLocation; onOpen: (loc: Card
     <li>
       <button className="ex-search-result" onClick={() => onOpen(loc)} onPointerEnter={() => queuePanoramaPrefetch(loc.id)} onPointerLeave={() => cancelPanoramaPrefetch(loc.id)} onFocus={() => prefetchPanorama(loc.id)} onPointerDown={() => prefetchPanorama(loc.id)}>
         <span className="ex-search-result__preview">
-          {imageFailed || !loc.previewUrl ? <SearchIcon /> : <img src={loc.previewUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />}
+          {imageFailed || !loc.previewUrl ? <SearchIcon /> : <img className="ex-fade-img" ref={fadeInWhenLoaded} src={loc.previewUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />}
         </span>
         <span className="ex-search-result__copy">
           <span className="ex-search-result__name">{loc.title}</span>
@@ -88,7 +88,7 @@ function VisitedPlace({ loc, onOpen }: { loc: CardLocation; onOpen: (loc: CardLo
     >
       {imageFailed || !loc.previewUrl
         ? <span className="ex-visited__fallback">{loc.title.slice(0, 1)}</span>
-        : <img src={loc.previewUrl} alt="" loading="lazy" draggable={false} onError={() => setImageFailed(true)} />}
+        : <img className="ex-fade-img" ref={fadeInWhenLoaded} src={loc.previewUrl} alt="" loading="lazy" draggable={false} onError={() => setImageFailed(true)} />}
     </button>
   );
 }
@@ -283,8 +283,22 @@ const CITY_OPTIONS: CityOption[] = (() => {
   return opts.sort((a, b) => (size.get(b.continent)! - size.get(a.continent)!) || a.continent.localeCompare(b.continent) || a.name.localeCompare(b.name));
 })();
 
-/** Places closer than this on screen (px) count as one cluster; else each gets its own circle. */
-const SOLO_SPACING = 76;
+/** Photo circles closer than this on screen (px) merge into one cluster circle. */
+const CLUSTER_PX = 84;
+/** A random order of the places for this visit: which place represents a cluster changes
+ *  between visits (discovery) but stays put while panning and zooming. */
+const VISIT_SEED = Math.floor(Math.random() * 2 ** 31);
+const _visitRank = new Map<string, number>();
+function visitRank(id: string): number {
+  let r = _visitRank.get(id);
+  if (r === undefined) {
+    let h = VISIT_SEED ^ 0x9e3779b9;
+    for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x85ebca6b) >>> 0;
+    r = (h ^ (h >>> 13)) >>> 0;
+    _visitRank.set(id, r);
+  }
+  return r;
+}
 /** Matches the .ex-pin appear/disappear transition in explore.css. */
 const PIN_FADE_MS = 280;
 
@@ -305,7 +319,10 @@ function makePin(loc: Loc, label: string | null, onOpen: (l: Loc) => void): HTML
   el.innerHTML = `<span class="ex-pin__photo"><img alt="" /></span>${label ? `<span class="ex-pin__label"></span>` : ''}`;
   if (label) (el.querySelector('.ex-pin__label') as HTMLElement).textContent = label;
   const img = el.querySelector('img') as HTMLImageElement;
+  // fade the photo in over the dark circle once it has loaded (the circle is the skeleton)
+  img.addEventListener('load', () => img.classList.add('is-loaded'), { once: true });
   img.src = loc.previewUrl;
+  if (img.complete && img.naturalWidth) img.classList.add('is-loaded');
   el.addEventListener('pointerenter', () => queuePanoramaPrefetch(loc.id));
   el.addEventListener('pointerleave', () => cancelPanoramaPrefetch(loc.id));
   el.addEventListener('focus', () => prefetchPanorama(loc.id));
@@ -318,11 +335,18 @@ function makePin(loc: Loc, label: string | null, onOpen: (l: Loc) => void): HTML
   return el;
 }
 
+/** Photo fades in over the card's dark background (the skeleton) once loaded, also when cached. */
+function fadeInWhenLoaded(img: HTMLImageElement | null) {
+  if (!img) return;
+  if (img.complete && img.naturalWidth) img.classList.add('is-loaded');
+  else img.addEventListener('load', () => img.classList.add('is-loaded'), { once: true });
+}
+
 function Card({ loc, title, overline, size, onOpen }: { loc: CardLocation; title: string; overline?: string; size: 'hero' | 'tile'; onOpen: (l: CardLocation) => void }) {
   const src = panoramaThumbnail(loc.id);
   return (
     <button className={`ex-card ex-card--${size}`} onClick={() => onOpen(loc)} onPointerEnter={() => queuePanoramaPrefetch(loc.id)} onPointerLeave={() => cancelPanoramaPrefetch(loc.id)} onFocus={() => prefetchPanorama(loc.id)} onPointerDown={() => prefetchPanorama(loc.id)}>
-      {src ? <img src={src} alt="" loading="lazy" /> : <div className="ex-card__ph" />}
+      {src ? <img key={src} src={src} alt="" loading="lazy" ref={fadeInWhenLoaded} /> : <div className="ex-card__ph" />}
       <div className="ex-card__shade" />
       <div className="ex-card__text">
         {overline && <div className="ex-card__overline">{overline}</div>}
@@ -353,6 +377,7 @@ export default function ExplorePage() {
   const [query, setQuery] = useState('');
   const searchInput = useRef<HTMLInputElement>(null);
   const panelScroll = useRef<HTMLDivElement>(null);
+  const panelBody = useRef<HTMLDivElement>(null);
   const [recentSearchIds, setRecentSearchIds] = useState(readRecentSearches);
   const dark = DARK_UI;
   // phones: one Apple Maps-style bottom sheet instead of the rail + side panel
@@ -447,113 +472,165 @@ export default function ExplorePage() {
     });
     m.on('rotate', () => setBearing(m.getBearing()));
 
-    // Place density at a distance, crossfading into individual photo circles up close.
+    // One photo circle over each heat area, so there's always something to tap; zooming in
+    // splits them. Tapping a circle opens its place.
     const pins = new Map<string, maplibregl.Marker>();
     const addSpotsLayer = () => {
       if (!m.getSource('spots')) m.addSource('spots', { type: 'geojson', data: SPOTS_GEOJSON });
       if (!m.getLayer('spots-heatmap')) {
-        // Keep geographic labels readable above the colour, including after the Esri style loads.
+        // the heat glow stays as the "where are places" overview, under the photo circles;
+        // keep geographic labels readable above the colour
         const labels = m.getStyle().layers?.find(layer => layer.type === 'symbol');
         m.addLayer(spotsHeatmapLayer(), labels?.id);
-        soloKey = ''; // new layer: re-apply the single-place filter
-        updatePins();
       }
+      updatePins();
     };
-    // A heatmap blob made of a single place is just that place: show its photo circle at any
-    // zoom (and leave it out of the heatmap). Only real clusters stay heat until PHOTO_ZOOM.
     const leaving = new Map<string, ReturnType<typeof setTimeout>>();
-    let solo = new Set<string>();
-    let soloKey = '';
-    const findSolo = () => {
-      const z = m.getZoom();
-      const near = Math.max(SOLO_SPACING, heatmapRadius(z));
-      const cLng = m.getCenter().lng;
-      const pts = LOCATIONS.map(l => m.project([l.lng + 360 * Math.round((cLng - l.lng) / 360), l.lat]));
-      const out = new Set<string>();
-      for (let i = 0; i < pts.length; i++) {
-        let alone = true;
-        for (let j = 0; j < pts.length && alone; j++) {
-          if (i !== j && Math.abs(pts[i].x - pts[j].x) < near && Math.abs(pts[i].y - pts[j].y) < near
-            && Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) < near) alone = false;
+    // a circle shows one real place's photo, so tapping it opens that place (even in a cluster)
+    const openPin = (rep: Loc) => navigate(panoramaViewUrl(rep.id));
+    // Clusters depend only on the zoom (computed from all places in world coordinates, per half
+    // zoom step), never on what's on screen, so panning doesn't regroup or move anything.
+    let clusterZoom = NaN;
+    let clusters: { rep: Loc; lng: number; lat: number; group: Loc[] }[] = [];
+    /** place id -> the circle (rep id) it belonged to before the last regroup / now */
+    let prevOwner = new Map<string, string>();
+    let owner = new Map<string, string>();
+    // Fixed priority for this visit: places in busier spots first (neighbours within ~40 km,
+    // bucketed so similar spots tie), then this visit's random order. With one fixed order, a
+    // place that has a circle keeps it as you zoom in (clusters only split, never swap photos).
+    const km = (a2: Loc, b2: Loc) => {
+      const r = Math.PI / 180, dLat = (b2.lat - a2.lat) * r, dLng = (b2.lng - a2.lng) * r;
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(a2.lat * r) * Math.cos(b2.lat * r) * Math.sin(dLng / 2) ** 2;
+      return 12742 * Math.asin(Math.min(1, Math.sqrt(h)));
+    };
+    const busy = new Map(LOCATIONS.map(l => [l.id, Math.floor(Math.log2(1 + LOCATIONS.filter(o2 => km(l, o2) < 40).length))]));
+    const ordered = [...LOCATIONS].sort((a2, b2) => busy.get(b2.id)! - busy.get(a2.id)! || visitRank(a2.id) - visitRank(b2.id));
+    const worldXY = (lng: number, lat: number, scale: number) => {
+      const s2 = Math.sin((Math.max(-85, Math.min(85, lat)) * Math.PI) / 180);
+      return [((lng + 180) / 360) * scale, (0.5 - Math.log((1 + s2) / (1 - s2)) / (4 * Math.PI)) * scale];
+    };
+    // One circle per heat area on a real place: walk the places in priority order; a place gets
+    // its own circle unless a higher-priority circle is within CLUSTER_PX, else it joins the
+    // nearest circle. Circles at one zoom are still circles at any closer zoom (nested), so
+    // zooming in only adds circles and zooming out only merges them.
+    const buildClusters = (zq: number) => {
+      const scale = 512 * 2 ** zq;
+      const out: { rep: Loc; x: number; y: number; group: Loc[] }[] = [];
+      for (const l of ordered) {
+        const [x, y] = worldXY(l.lng, l.lat, scale);
+        let near: (typeof out)[number] | null = null, nd = CLUSTER_PX;
+        for (const k of out) {
+          let dx = Math.abs(k.x - x);
+          dx = Math.min(dx, scale - dx); // across the antimeridian
+          const d = Math.hypot(dx, k.y - y);
+          if (d < nd) { nd = d; near = k; }
         }
-        if (alone) out.add(LOCATIONS[i].id);
+        if (near) near.group.push(l);
+        else out.push({ rep: l, x, y, group: [l] });
       }
-      return out;
+      return out.map(({ rep, group }) => ({ rep, group, lng: rep.lng, lat: rep.lat }));
     };
     const updatePins = () => {
-      const z = m.getZoom();
-      const clusterOpacity = photoPinOpacity(z);
-      solo = z >= PHOTO_ZOOM ? new Set() : findSolo();
-      const key = [...solo].sort().join(',');
-      if (key !== soloKey && m.getLayer('spots-heatmap')) {
-        soloKey = key;
-        m.setFilter('spots-heatmap', solo.size ? ['!', ['in', ['get', 'id'], ['literal', [...solo]]]] : null);
+      const zq = Math.floor(m.getZoom() * 2) / 2;
+      if (zq !== clusterZoom) {
+        clusterZoom = zq;
+        clusters = buildClusters(zq);
+        prevOwner = owner;
+        owner = new Map(clusters.flatMap(c => c.group.map(g => [g.id, c.rep.id] as [string, string])));
+        if (import.meta.env.DEV) (window as unknown as { __clusters: unknown }).__clusters = clusters;
       }
+      const W = m.getContainer().clientWidth, H = m.getContainer().clientHeight;
+      const refLng = m.getCenter().lng;
       const keep = new Set<string>();
-      const b = m.getBounds();
-      const c = m.getCenter();
-      const inView = LOCATIONS.filter((l) => b.contains([l.lng, l.lat]));
-      const show = [
-        ...inView.filter(l => solo.has(l.id)),
-        ...(clusterOpacity > 0 ? inView.filter(l => !solo.has(l.id))
-          .sort((a, b2) => (a.lat - c.lat) ** 2 + (a.lng - c.lng) ** 2 - ((b2.lat - c.lat) ** 2 + (b2.lng - c.lng) ** 2))
-          .slice(0, 30) : []),
-      ];
-      for (const l of show) {
-        keep.add(l.id);
-        const leavingTimer = leaving.get(l.id);
+      for (const { rep, lng, lat } of clusters) {
+        const key = rep.id;
+        const wl = lng + 360 * Math.round((refLng - lng) / 360);
+        const p = m.project([wl, lat]);
+        if (p.x < -CLUSTER_PX || p.y < -CLUSTER_PX || p.x > W + CLUSTER_PX || p.y > H + CLUSTER_PX) continue;
+        keep.add(key);
+        const leavingTimer = leaving.get(key);
         if (leavingTimer !== undefined) {
-          // was fading out — bring it back
           clearTimeout(leavingTimer);
-          leaving.delete(l.id);
-          pins.get(l.id)?.getElement().classList.add('is-shown');
+          leaving.delete(key);
+          pins.get(key)?.getElement().classList.add('is-shown');
         }
-        if (!pins.has(l.id)) {
-          const el = makePin(l, l.title, (loc) => navigate(panoramaViewUrl(loc.id)));
-          pins.set(l.id, new maplibregl.Marker({ element: el, anchor: 'top', offset: [0, -31] }).setLngLat([l.lng, l.lat]).addTo(m));
-          // ease in (the class flips after the first paint so the transition runs)
-          requestAnimationFrame(() => requestAnimationFrame(() => { if (!leaving.has(l.id)) el.classList.add('is-shown'); }));
+        if (!pins.has(key)) {
+          const el = makePin(rep, rep.title, openPin);
+          // split: a new circle slides out of the circle it was part of (Leaflet.markercluster /
+          // MapKit style) instead of popping up in place
+          const parent = pins.get(prevOwner.get(rep.id) ?? '');
+          if (parent && !leaving.has(parent.getElement().dataset.key ?? '')) {
+            const pp = m.project(parent.getLngLat());
+            el.style.setProperty('--fx', `${(pp.x - p.x).toFixed(1)}px`);
+            el.style.setProperty('--fy', `${(pp.y - p.y).toFixed(1)}px`);
+          }
+          el.dataset.key = key;
+          pins.set(key, new maplibregl.Marker({ element: el, anchor: 'top', offset: [0, -31] }).setLngLat([wl, lat]).addTo(m));
+          requestAnimationFrame(() => requestAnimationFrame(() => { if (!leaving.has(key)) el.classList.add('is-shown'); }));
+        } else {
+          // keep it on the copy of the world being viewed (only when that changes: setLngLat
+          // re-lays the marker, and this runs on every frame of a pan)
+          const mk = pins.get(key)!;
+          if (mk.getLngLat().lng !== wl) mk.setLngLat([wl, lat]);
+          if (mk.getElement().classList.contains('is-shown')) {
+            mk.getElement().style.removeProperty('--fx');
+            mk.getElement().style.removeProperty('--fy');
+          }
         }
-        const opacity = solo.has(l.id) ? 1 : clusterOpacity;
-        const el = pins.get(l.id)!.getElement();
-        el.style.opacity = String(opacity);
-        el.style.pointerEvents = opacity >= 0.5 ? 'auto' : 'none';
-        el.tabIndex = opacity >= 0.5 ? 0 : -1;
-        el.setAttribute('aria-hidden', String(opacity < 0.5));
       }
       for (const [id, mk] of pins) {
         if (keep.has(id) || leaving.has(id)) continue;
-        // ease out, then drop the marker
         const el = mk.getElement();
+        // merge: slide into the circle it joined while fading (off-screen ones just fade)
+        const into = pins.get(owner.get(id) ?? '');
+        if (into && into !== mk) {
+          const from = m.project(mk.getLngLat()), to = m.project(into.getLngLat());
+          el.style.setProperty('--fx', `${(to.x - from.x).toFixed(1)}px`);
+          el.style.setProperty('--fy', `${(to.y - from.y).toFixed(1)}px`);
+        } else {
+          el.style.removeProperty('--fx');
+          el.style.removeProperty('--fy');
+        }
         el.classList.remove('is-shown');
         el.style.pointerEvents = 'none';
         leaving.set(id, setTimeout(() => { mk.remove(); pins.delete(id); leaving.delete(id); }, PIN_FADE_MS));
       }
     };
-    // Heatmap pixels don't identify a single feature. Hit-test the actual nearby places instead.
-    const nearestHotspot = (point: maplibregl.Point) => {
-      if (m.getZoom() >= PHOTO_ZOOM) return null;
-      const referenceLng = m.unproject(point).lng;
-      let nearest: Loc | null = null;
-      let distance = heatmapRadius(m.getZoom());
-      for (const loc of LOCATIONS) {
-        if (solo.has(loc.id)) continue; // has its own photo circle
-        const lng = loc.lng + 360 * Math.round((referenceLng - loc.lng) / 360);
-        const projected = m.project([lng, loc.lat]);
-        const delta = Math.hypot(projected.x - point.x, projected.y - point.y);
-        if (delta < distance) { nearest = loc; distance = delta; }
+    // Tapping the heat glow (not a photo circle; those open their place) zooms in toward the
+    // nearest place under it, like before.
+    m.on('click', (e) => {
+      if (m.getZoom() >= PHOTO_ZOOM) return;
+      const refLng = m.unproject(e.point).lng;
+      let nearest: Loc | null = null, d = heatmapRadius(m.getZoom());
+      for (const l of LOCATIONS) {
+        const lng = l.lng + 360 * Math.round((refLng - l.lng) / 360);
+        const p = m.project([lng, l.lat]);
+        const dd = Math.hypot(p.x - e.point.x, p.y - e.point.y);
+        if (dd < d) { d = dd; nearest = l; }
       }
-      return nearest;
-    };
-    m.on('click', e => {
-      const loc = nearestHotspot(e.point);
-      if (!loc) return;
-      const lng = loc.lng + 360 * Math.round((m.unproject(e.point).lng - loc.lng) / 360);
-      m.flyTo({ center: [lng, loc.lat], zoom: Math.min(PHOTO_ZOOM + 1, Math.max(11, m.getZoom() + 3)), offset: mapOffset(), essential: true });
+      if (!nearest) return;
+      const lng = nearest.lng + 360 * Math.round((refLng - nearest.lng) / 360);
+      m.flyTo({ center: [lng, nearest.lat], zoom: Math.min(PHOTO_ZOOM + 1, Math.max(11, m.getZoom() + 3)), offset: mapOffset(), essential: true });
+      // you chose to go there, so the panel follows once the map arrives
+      m.once('moveend', () => followMapRef.current(m));
     });
     m.on('style.load', addSpotsLayer);
-    m.on('move', updatePins);
-    m.on('idle', updatePins);
+    let pinFrame = 0;
+    const schedulePins = () => {
+      if (!pinFrame) pinFrame = requestAnimationFrame(() => { pinFrame = 0; updatePins(); });
+    };
+    m.on('move', schedulePins);
+    m.on('idle', schedulePins);
+    // The panel follows the map when *you* move it (drag, scroll, pinch): once the map settles it
+    // switches to the area in view. Moves we start ourselves (picking a city or a search result
+    // flies there) don't count, so they never override what you picked.
+    let userMove = false;
+    m.on('movestart', (e) => { userMove = !!(e as { originalEvent?: Event }).originalEvent; });
+    m.on('moveend', () => {
+      if (!userMove) return;
+      userMove = false;
+      followMapRef.current(m);
+    });
     map.current = m;
     if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = m;
     return () => {
@@ -566,6 +643,51 @@ export default function ExplorePage() {
 
   // fly to the selected city (not on first load when returning from a street view)
   const skipCityFly = useRef(false);
+  /** After you move the map yourself: show the city of the place nearest the middle of what you see. */
+  const followMapRef = useRef<(m: maplibregl.Map) => void>(() => {});
+  followMapRef.current = (m) => {
+    if (m.getZoom() < 3) return; // whole-world view: keep the current city
+    const W = m.getContainer().clientWidth, H = m.getContainer().clientHeight;
+    const [ox, oy] = mapOffset();
+    const cx = W / 2 + ox, cy = H / 2 + oy; // middle of the visible map (beside the panel)
+    const refLng = m.getCenter().lng;
+    let best: Loc | null = null, bd = Infinity;
+    for (const l of LOCATIONS) {
+      const p = m.project([l.lng + 360 * Math.round((refLng - l.lng) / 360), l.lat]);
+      if (p.x < 0 || p.y < 0 || p.x > W || p.y > H) continue;
+      const d = Math.hypot(p.x - cx, p.y - cy);
+      if (d < bd) { bd = d; best = l; }
+    }
+    if (!best || best.city === city) return;
+    // no flip-flopping: stay while any place of the current area is still near the middle
+    const keepR = Math.min(W, H) * 0.22;
+    const stillHere = LOCATIONS.some(l => {
+      if (l.city !== city) return false;
+      const p = m.project([l.lng + 360 * Math.round((refLng - l.lng) / 360), l.lat]);
+      return Math.hypot(p.x - cx, p.y - cy) < keepR;
+    });
+    if (stillHere) return;
+    // reading further down the panel: don't swap the list under you
+    if ((panelScroll.current?.scrollTop ?? 0) > 40) return;
+    skipCityFly.current = true; // the map is already here: just switch the panel
+    switchCity(best.city);
+  };
+  /**
+   * Change the panel's area: the list fades out and the new one fades in right away (no waiting
+   * for photos); each photo starts as an empty dark card and fills in as it loads (the skeleton).
+   */
+  const swapToken = useRef(0);
+  const switchCity = (next: string) => {
+    const token = ++swapToken.current;
+    const body = panelBody.current;
+    if (!body || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setCity(next); return; }
+    body.classList.add('is-swapping');
+    setTimeout(() => {
+      if (token !== swapToken.current) return;
+      setCity(next);
+      requestAnimationFrame(() => requestAnimationFrame(() => body.classList.remove('is-swapping')));
+    }, 160);
+  };
   useEffect(() => {
     const m = map.current;
     if (!m || !spots.length) return;
@@ -671,7 +793,7 @@ export default function ExplorePage() {
             <div className="ex-row ex-row--recents">
               {visitedPlaces.map(loc => (
                 <button key={loc.id} className="ex-recent" onClick={() => open(loc)} onPointerDown={() => prefetchPanorama(loc.id)}>
-                  <span className="ex-recent__photo">{loc.previewUrl && <img src={loc.previewUrl} alt="" loading="lazy" draggable={false} />}</span>
+                  <span className="ex-recent__photo">{loc.previewUrl && <img className="ex-fade-img" ref={fadeInWhenLoaded} src={loc.previewUrl} alt="" loading="lazy" draggable={false} />}</span>
                   <span className="ex-recent__name">{loc.title}</span>
                 </button>
               ))}
@@ -823,7 +945,7 @@ export default function ExplorePage() {
           </div>}
         </header>
 
-        <div className="ex-panel__body">
+        <div ref={panelBody} className="ex-panel__body">
           {section === 'search' && searchBody}
           {section !== 'search' && hero && <Card size="hero" loc={hero} overline={city} title={hero.title} onOpen={open} />}
           {section !== 'search' && popular.length > 0 && (

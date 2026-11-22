@@ -1,0 +1,76 @@
+# CI: type-check + build every push and pull request.
+# CD: pushes to master deploy the site and the live-drawing relay to the Oracle server
+#     (same steps as scripts/deploy.sh). Can also be run by hand from the Actions tab.
+#
+# Repo secret needed for deploys: DEPLOY_SSH_KEY — private half of a key that is in the
+# server's ~/.ssh/authorized_keys (ubuntu@server.example).
+name: CI / Deploy
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Type-check app and relay
+        run: npx tsc --noEmit -p tsconfig.app.json && npx tsc --noEmit -p tsconfig.server.json
+      - name: Build
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 3
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      HOST: ubuntu@server.example
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: SSH key + pinned host key
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          # the server's real host key (pinned, not trusted on first use)
+          echo 'server.example ssh-ed25519 HOST_KEY' >> ~/.ssh/known_hosts
+      - name: Deploy site
+        run: SKIP_BUILD=1 DEPLOY_KEY=~/.ssh/deploy bash scripts/deploy.sh
+      - name: Update live-drawing relay (restart only if it changed)
+        run: |
+          changed=$(rsync -ai -e "ssh -i ~/.ssh/deploy" server shared "$HOST:/home/ubuntu/streetview-realtime/" | grep -v '^\.' || true)
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            ssh -i ~/.ssh/deploy "$HOST" 'sudo systemctl restart streetview-realtime && sleep 2 && systemctl is-active streetview-realtime'
+          else
+            echo "relay unchanged"
+          fi
+      - name: Check the live site serves this build
+        run: |
+          want=$(grep -o 'assets/index-[^"]*\.js' dist/index.html | head -1)
+          got=$(curl -fsS https://paintaround.com/ | grep -o 'assets/index-[^"]*\.js' | head -1)
+          echo "built $want, live $got"
+          [ "$want" = "$got" ]

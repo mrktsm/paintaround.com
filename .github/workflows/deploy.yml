@@ -61,7 +61,8 @@ jobs:
         run: SKIP_BUILD=1 DEPLOY_KEY=~/.ssh/deploy bash scripts/deploy.sh
       - name: Update live-drawing relay (restart only if it changed)
         run: |
-          changed=$(rsync -ai -e "ssh -i ~/.ssh/deploy" server shared "$HOST:/home/ubuntu/streetview-realtime/" | grep -v '^\.' || true)
+          # -c: compare contents (a fresh checkout gives every file a new timestamp)
+          changed=$(rsync -aic -e "ssh -i ~/.ssh/deploy" server shared "$HOST:/home/ubuntu/streetview-realtime/" | grep -v '^\.' || true)
           if [ -n "$changed" ]; then
             echo "$changed"
             ssh -i ~/.ssh/deploy "$HOST" 'sudo systemctl restart streetview-realtime && sleep 2 && systemctl is-active streetview-realtime'

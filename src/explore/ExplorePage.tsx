@@ -376,6 +376,7 @@ export default function ExplorePage() {
   const [creditOpen, setCreditOpen] = useState(false);
   const [query, setQuery] = useState('');
   const searchInput = useRef<HTMLInputElement>(null);
+  const searchTap = useRef<{ x: number; y: number; t: number } | null>(null);
   const panelScroll = useRef<HTMLDivElement>(null);
   const panelBody = useRef<HTMLDivElement>(null);
   const [recentSearchIds, setRecentSearchIds] = useState(readRecentSearches);
@@ -806,13 +807,22 @@ export default function ExplorePage() {
               // pushed the field off screen. So: take over the tap, open the sheet fully and focus
               // without scrolling (still inside the tap, so the keyboard opens), then undo any
               // leftover page shift once the keyboard is up.
+              // Only a tap (finger lifts without moving) opens search: a drag that starts on the field
+              // is moving the sheet (e.g. swiping it down to hide it) and must not focus it.
               onPointerDown={(e) => {
                 if (detent === 'full' || document.activeElement === searchInput.current) return;
-                e.preventDefault();
+                e.preventDefault(); // no native focus yet
+                searchTap.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+              }}
+              onPointerUp={(e) => {
+                const tap = searchTap.current;
+                searchTap.current = null;
+                if (!tap || Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 8 || performance.now() - tap.t > 600) return;
                 setSearching(true);
                 setDetent('full');
-                searchInput.current?.focus({ preventScroll: true });
+                searchInput.current?.focus({ preventScroll: true }); // still inside the tap: keyboard opens
               }}
+              onPointerCancel={() => { searchTap.current = null; }}
               onFocus={() => {
                 setSearching(true);
                 setDetent('full');

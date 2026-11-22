@@ -11,7 +11,7 @@ import { applyShading, shadeRegion } from "./deep/strokeShading";
 import { SurfaceDecal, loadDeepData, surfaceRing, type DeepData } from "./deep/surfaceDecal";
 import { GeodesicMap } from "./deep/geodesicMap";
 import { realtime } from "./realtime/client";
-import type { CursorState, FinishedStroke, ServerMessage } from "../shared/realtime";
+import { PAINT_LAYER, type CursorState, type FinishedStroke, type LayerTiles, type ServerMessage } from "../shared/realtime";
 
 /** Resolve 'rainbow' into a concrete CSS color using the same continuous
  *  hue rotation as the GPU shader (Date.now() / 20 → degrees). */
@@ -2439,8 +2439,78 @@ export class DrawingOverlay {
   /** Join this panorama's live room: others' cursors and strokes appear, ours are shared. */
   subscribeToRealtime(imageId: string): void {
     this.unsubscribeFromRealtime();
+    this._liveRoom = imageId;
     this._realtimeOff = realtime.on((msg) => this.onRealtimeMessage(msg));
     realtime.join(imageId);
+  }
+
+  /** Called when undo/redo availability changes without a user action (e.g. strokes got baked). */
+  onHistoryChange: (() => void) | null = null;
+
+  // ── The room's paint layer: older strokes, flattened by the server into a few tiles ──
+  private _liveRoom: string | null = null;
+  private _layerTiles = new Map<string, { version: number; tex: MarkerTexture }>();
+  /** load / update these tiles; resolves once they're on screen (so strokes can swap without a gap) */
+  private async applyLayerTiles(tiles: LayerTiles): Promise<void> {
+    const room = this._liveRoom;
+    if (!room) return;
+    const { width: LW, height: LH, tile: T } = PAINT_LAYER;
+    await Promise.all(Object.entries(tiles).map(async ([key, version]) => {
+      if (this._layerTiles.get(key)?.version === version) return;
+      const [tx, ty] = key.split("_").map(Number);
+      try {
+        const blob = await (await fetch(`/api/layer/${encodeURIComponent(room)}/${key}?v=${version}`)).blob();
+        const bitmap = await createImageBitmap(blob);
+        if (this._liveRoom !== room) { bitmap.close?.(); return; }
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
+        bitmap.close?.();
+        // a fine grid so the tile follows the sphere when projected (like baked strokes)
+        const N = 16;
+        const gridBasic: [number, number][][] = [];
+        for (let r = 0; r <= N; r++) {
+          const row: [number, number][] = [];
+          for (let c = 0; c <= N; c++) row.push([(tx * T + (c / N) * T) / LW, (ty * T + (r / N) * T) / LH]);
+          gridBasic.push(row);
+        }
+        const tex: MarkerTexture = {
+          canvas, gridBasic, gridRows: N, gridCols: N,
+          srcWidth: canvas.width, srcHeight: canvas.height, referenceFov: 90, opacity: 1,
+        };
+        const old = this._layerTiles.get(key);
+        if (old && old.version > version) return; // a newer one landed first
+        this._layerTiles.set(key, { version, tex });
+        const i = old ? this.markerTextures.indexOf(old.tex) : -1;
+        // the layer is older paint: it sits under every separate stroke
+        if (i > -1) this.markerTextures[i] = tex;
+        else this.markerTextures.unshift(tex);
+        if (old && this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(old.tex));
+      } catch (err) {
+        console.warn("[realtime] paint layer tile failed:", key, err);
+      }
+    }));
+    this.render();
+  }
+
+  /** Strokes that are now part of the paint layer: drop the separate copies (ours too: undo can't reach into the layer). */
+  private dropFlattened(ids: string[]): void {
+    const gone = new Set(ids);
+    const isGone = (e: unknown) => !!(e as MarkerTexture).liveId && gone.has((e as MarkerTexture).liveId!);
+    this._undoStack = this._undoStack.filter(e => !isGone(e));
+    this._redoStack = this._redoStack.filter(e => !isGone(e));
+    this.removeLiveStrokes(ids);
+    this.onHistoryChange?.();
+  }
+
+  private clearLayerTiles(): void {
+    for (const { tex } of this._layerTiles.values()) {
+      const i = this.markerTextures.indexOf(tex);
+      if (i > -1) this.markerTextures.splice(i, 1);
+      if (this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(tex));
+    }
+    this._layerTiles.clear();
   }
 
   /**
@@ -2450,12 +2520,14 @@ export class DrawingOverlay {
    */
   leaveRealtime(): void {
     this.unsubscribeFromRealtime();
+    this._liveRoom = null;
     realtime.leave();
   }
 
   unsubscribeFromRealtime(): void {
     this._realtimeOff?.();
     this._realtimeOff = null;
+    this.clearLayerTiles();
     // Clean up others' in-progress strokes and cursors
     for (const id of [...this._remotePreviews.keys()]) this.remotePreviewEnd(id);
     for (const id of [...this._replays.keys()]) this.dropReplays(id);
@@ -2468,7 +2540,12 @@ export class DrawingOverlay {
         // strokes others drew in this room before we arrived (held in server memory)
         this.clearRemoteCursors();
         for (const p of msg.peers) this._peerColors.set(p.id, p.color);
+        if (msg.layer) void this.applyLayerTiles(msg.layer);
         for (const s of msg.strokes) void this.addLiveStroke(s);
+        return;
+      case "flattened":
+        // swap the separate strokes for the updated layer once its tiles are on screen
+        void this.applyLayerTiles(msg.tiles).then(() => this.dropFlattened(msg.ids));
         return;
       case "peer_join":
         this._peerColors.set(msg.peer.id, msg.peer.color);

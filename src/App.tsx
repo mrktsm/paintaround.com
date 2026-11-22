@@ -548,6 +548,9 @@ function App({ panorama }: { panorama: Panorama }) {
       });
 
       drawingOverlayRef.current = new DrawingOverlay(containerRef.current);
+      // keep the undo/redo buttons in step when the history changes on its own (strokes baked
+      // into the paint layer can no longer be undone)
+      drawingOverlayRef.current.onHistoryChange = refreshUndoRedo;
       drawingOverlayRef.current.setGuestMode(false); // no accounts: nothing to hold back until sign-in
       // Start prefetching strokes immediately — don't wait for the viewer to load
       if (imageId) drawingOverlayRef.current.prefetchStrokes(imageId);

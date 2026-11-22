@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { getPreview, previewManifest, schedulePreview } from './previews.ts';
+import { PaintLayer } from './layer.ts';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { LIMITS, PEER_COLORS, type ClientMessage, type FinishedStroke, type Peer, type ServerMessage } from '../shared/realtime.ts';
 
@@ -35,28 +36,43 @@ interface Client {
 interface Room {
   id: string;
   clients: Set<Client>;
-  strokes: Map<string, { stroke: FinishedStroke; bytes: number }>;
+  /** fresh strokes, oldest first (undo / erase still work on these) */
+  strokes: Map<string, { stroke: FinishedStroke; bytes: number; added: number }>;
+  /** older strokes, flattened into one tiled image */
+  layer: PaintLayer;
+  flattening: boolean;
   bytes: number;
   /** last time someone drew or erased here (oldest rooms give way when memory runs short) */
   touched: number;
 }
 
+/** Strokes older than this get flattened into the room's paint layer. */
+const FLATTEN_AFTER_MS = Number(process.env.FLATTEN_AFTER_MS ?? 3 * 60_000);
+
 /** All rooms' strokes together stay under this (oldest strokes of the least recent rooms go). */
 const TOTAL_STROKE_BYTES = Number(process.env.TOTAL_STROKE_BYTES ?? 2 * 1024 ** 3);
 let totalBytes = 0;
-const roomStrokes = (room: Room) => () => [...room.strokes.values()].map(s => s.stroke);
+const roomDrawings = (room: Room) => () => ({ layer: room.layer, strokes: [...room.strokes.values()].map(s => s.stroke) });
 function trimMemory(keep: Room) {
   while (totalBytes > TOTAL_STROKE_BYTES) {
     let oldest: Room | null = null;
-    for (const r of rooms.values()) if (r !== keep && r.strokes.size && (!oldest || r.touched < oldest.touched)) oldest = r;
+    for (const r of rooms.values()) if (r !== keep && (r.strokes.size || r.layer.bytes) && (!oldest || r.touched < oldest.touched)) oldest = r;
     const victim = oldest ?? keep;
     const first = victim.strokes.keys().next();
-    if (first.done) return;
+    if (first.done) {
+      // only a paint layer left: the least recently drawn place loses it
+      if (!victim.layer.bytes) return;
+      totalBytes -= victim.layer.bytes;
+      victim.bytes -= victim.layer.bytes;
+      victim.layer.clear();
+      schedulePreview(victim.id, roomDrawings(victim));
+      continue;
+    }
     const s = victim.strokes.get(first.value)!;
     victim.strokes.delete(first.value);
     victim.bytes -= s.bytes;
     totalBytes -= s.bytes;
-    schedulePreview(victim.id, roomStrokes(victim));
+    schedulePreview(victim.id, roomDrawings(victim));
   }
 }
 
@@ -77,7 +93,7 @@ function leave(c: Client) {
   room.clients.delete(c);
   c.room = null;
   // the room (and its drawings) stays when the last person leaves; only empty rooms are dropped
-  if (room.clients.size === 0 && room.strokes.size === 0) rooms.delete(room.id);
+  if (room.clients.size === 0 && room.strokes.size === 0 && room.layer.tiles.size === 0) rooms.delete(room.id);
   else if (room.clients.size) broadcast(room, c, { t: 'peer_leave', id: c.peer.id });
 }
 
@@ -86,7 +102,7 @@ function join(c: Client, roomId: string, preferred?: string) {
   leave(c);
   let room = rooms.get(roomId);
   if (room && room.clients.size >= LIMITS.maxPeersPerRoom) return send(c, { t: 'error', reason: 'room_full' });
-  if (!room) rooms.set(roomId, (room = { id: roomId, clients: new Set(), strokes: new Map(), bytes: 0, touched: Date.now() }));
+  if (!room) rooms.set(roomId, (room = { id: roomId, clients: new Set(), strokes: new Map(), layer: new PaintLayer(), flattening: false, bytes: 0, touched: Date.now() }));
   // keep the person's own colour unless someone in the room already has it
   const taken = new Set([...room.clients].map(o => o.peer.color));
   const wanted = preferred && (PEER_COLORS as readonly string[]).includes(preferred) ? preferred : c.peer.color;
@@ -99,6 +115,7 @@ function join(c: Client, roomId: string, preferred?: string) {
     t: 'welcome', you: c.peer.id, room: roomId,
     peers: [...room.clients].filter(o => o !== c).map(o => o.peer),
     strokes: [...room.strokes.values()].map(s => s.stroke),
+    ...(room.layer.tiles.size ? { layer: room.layer.manifest() } : {}),
   });
   broadcast(room, c, { t: 'peer_join', peer: c.peer });
 }
@@ -182,7 +199,7 @@ function handle(c: Client, raw: string) {
       const old = room.strokes.get(stroke.id);
       if (old) { room.bytes -= old.bytes; totalBytes -= old.bytes; }
       room.strokes.delete(stroke.id); // re-insert = newest (redo)
-      room.strokes.set(stroke.id, { stroke, bytes });
+      room.strokes.set(stroke.id, { stroke, bytes, added: now });
       room.bytes += bytes;
       totalBytes += bytes;
       room.touched = now;
@@ -195,7 +212,7 @@ function handle(c: Client, raw: string) {
       }
       trimMemory(room);
       broadcast(room, c, { t: 'stroke_done', stroke, from });
-      schedulePreview(room.id, roomStrokes(room));
+      schedulePreview(room.id, roomDrawings(room));
       return;
     }
     case 'erase': {
@@ -208,16 +225,51 @@ function handle(c: Client, raw: string) {
       if (ids.length) {
         room.touched = Date.now();
         broadcast(room, c, { t: 'erase', ids, from });
-        schedulePreview(room.id, roomStrokes(room));
+        schedulePreview(room.id, roomDrawings(room));
       }
       return;
     }
   }
 }
 
+// ── flattening: strokes older than FLATTEN_AFTER_MS are baked into the room's paint layer ──
+async function flatten(room: Room) {
+  if (room.flattening) return;
+  const cutoff = Date.now() - FLATTEN_AFTER_MS;
+  const due = [...room.strokes.entries()].filter(([, s]) => s.added <= cutoff);
+  if (!due.length) return;
+  room.flattening = true;
+  try {
+    const before = room.layer.bytes;
+    const tiles = await room.layer.bake(due.map(([, s]) => s.stroke));
+    // a stroke erased while baking would wrongly stay in the layer: rare; drop it from the list
+    const ids: string[] = [];
+    for (const [id, s] of due) {
+      if (!room.strokes.has(id)) continue;
+      room.strokes.delete(id);
+      room.bytes -= s.bytes;
+      totalBytes -= s.bytes;
+      ids.push(id);
+    }
+    const grew = room.layer.bytes - before;
+    room.bytes += grew;
+    totalBytes += grew;
+    const msg = JSON.stringify({ t: 'flattened', ids, tiles } satisfies ServerMessage);
+    for (const c of room.clients) if (c.ws.readyState === c.ws.OPEN) c.ws.send(msg);
+    schedulePreview(room.id, roomDrawings(room));
+    trimMemory(room);
+  } catch (e) {
+    console.warn(`[layer] ${room.id}: ${(e as Error).message}`);
+  } finally {
+    room.flattening = false;
+  }
+}
+setInterval(() => { for (const room of rooms.values()) void flatten(room); }, Math.min(30_000, Math.max(2_000, FLATTEN_AFTER_MS / 4)));
+
 // HTTP: previews with drawings (the site proxies /api/ here)
 //   GET /api/previews                 -> { [placeId]: version } for places whose preview has drawings
 //   GET /api/previews/<id>/card|loading -> the JPEG
+//   GET /api/layer/<room>/<x_y>         -> a paint-layer tile (WebP)
 const http = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const cors = { 'access-control-allow-origin': '*' };
@@ -225,6 +277,15 @@ const http = createServer((req, res) => {
   if (url.pathname === '/api/previews') {
     res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' });
     res.end(JSON.stringify(previewManifest()));
+    return;
+  }
+  // a room's paint-layer tile (versioned URL, cached for good)
+  const lt = url.pathname.match(/^\/api\/layer\/([\w.-]{1,128})\/(\d{1,2}_\d{1,2})$/);
+  if (lt) {
+    const tile = rooms.get(lt[1])?.layer.tiles.get(lt[2]);
+    if (!tile) { res.writeHead(404, cors).end(); return; }
+    res.writeHead(200, { ...cors, 'content-type': 'image/webp', 'cache-control': 'public, max-age=31536000, immutable' });
+    res.end(tile.buf);
     return;
   }
   const m = url.pathname.match(/^\/api\/previews\/([\w.-]{1,128})\/(card|loading)$/);

@@ -509,24 +509,48 @@ export default function ExplorePage() {
       const s2 = Math.sin((Math.max(-85, Math.min(85, lat)) * Math.PI) / 180);
       return [((lng + 180) / 360) * scale, (0.5 - Math.log((1 + s2) / (1 - s2)) / (4 * Math.PI)) * scale];
     };
-    // One circle per heat area on a real place: walk the places in priority order; a place gets
-    // its own circle unless a higher-priority circle is within CLUSTER_PX, else it joins the
-    // nearest circle. Circles at one zoom are still circles at any closer zoom (nested), so
-    // zooming in only adds circles and zooming out only merges them.
+    // Which places get a circle is decided level by level, from the whole world (zoom 0) inward
+    // in half-zoom steps: every circle at one level is kept at all closer levels, and new ones
+    // are only added (in priority order) where no circle is within CLUSTER_PX. So zooming in only
+    // splits circles and zooming out only merges them; a circle never pops out and gets taken back.
+    const repLevels = new Map<number, Loc[]>();
+    const repsAt = (zq: number): Loc[] => {
+      const cached = repLevels.get(zq);
+      if (cached) return cached;
+      const seeds = zq <= 0 ? [] : repsAt(zq - 0.5);
+      const scale = 512 * 2 ** zq;
+      const reps = [...seeds];
+      const xy = reps.map(l => worldXY(l.lng, l.lat, scale));
+      const isRep = new Set(reps.map(l => l.id));
+      for (const l of ordered) {
+        if (isRep.has(l.id)) continue;
+        const [x, y] = worldXY(l.lng, l.lat, scale);
+        const taken = xy.some(([rx, ry]) => {
+          let dx = Math.abs(rx - x);
+          dx = Math.min(dx, scale - dx); // across the antimeridian
+          return Math.hypot(dx, ry - y) < CLUSTER_PX;
+        });
+        if (taken) continue;
+        reps.push(l); xy.push([x, y]); isRep.add(l.id);
+      }
+      repLevels.set(zq, reps);
+      return reps;
+    };
     const buildClusters = (zq: number) => {
       const scale = 512 * 2 ** zq;
-      const out: { rep: Loc; x: number; y: number; group: Loc[] }[] = [];
+      const reps = repsAt(Math.max(0, zq));
+      const out = reps.map(rep => { const [x, y] = worldXY(rep.lng, rep.lat, scale); return { rep, x, y, group: [] as Loc[] }; });
+      // every place joins its nearest circle (that's the cluster it opens up from)
       for (const l of ordered) {
         const [x, y] = worldXY(l.lng, l.lat, scale);
-        let near: (typeof out)[number] | null = null, nd = CLUSTER_PX;
+        let best = out[0], bd = Infinity;
         for (const k of out) {
           let dx = Math.abs(k.x - x);
-          dx = Math.min(dx, scale - dx); // across the antimeridian
+          dx = Math.min(dx, scale - dx);
           const d = Math.hypot(dx, k.y - y);
-          if (d < nd) { nd = d; near = k; }
+          if (d < bd) { bd = d; best = k; }
         }
-        if (near) near.group.push(l);
-        else out.push({ rep: l, x, y, group: [l] });
+        best?.group.push(l);
       }
       return out.map(({ rep, group }) => ({ rep, group, lng: rep.lng, lat: rep.lat }));
     };

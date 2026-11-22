@@ -2,8 +2,8 @@ import LegalPage, { Section } from './legal/LegalPage';
 
 export default function PrivacyPolicy() {
   return (
-    <LegalPage title="Privacy Policy" updated="November 21, 2026">
-      <p>This Privacy Policy explains what information paintaround at paintaround.com (the "Service") handles when you use it. In short: there are no accounts, we don't track you, and drawings aren't stored.</p>
+    <LegalPage title="Privacy Policy" updated="November 22, 2026">
+      <p>This Privacy Policy explains what information paintaround at paintaround.com (the "Service") handles when you use it. In short: there are no accounts, we don't track you, and drawings are only kept temporarily.</p>
 
       <Section n={1} heading="No accounts">
         <p>You never sign up. We don't ask for your name, email address, phone number or password, and we don't use sign-in services.</p>
@@ -12,19 +12,19 @@ export default function PrivacyPolicy() {
       <Section n={2} heading="What we handle">
         <ul>
           <li><strong>A random device ID.</strong> Your device creates it and keeps it. It lets us keep track of your ink and helps us stop abuse. It isn't linked to who you are.</li>
-          <li><strong>Your drawings and cursor.</strong> While you're in a place, your cursor position, brush and drawings are sent to our server and passed on live to the other people viewing that place, along with a cursor colour.</li>
+          <li><strong>Your drawings and cursor.</strong> While you're in a place, your cursor position, brush and drawings are sent to our server and passed on live to the other people viewing that place, along with a cursor colour. Finished drawings stay on the place for people who come later and appear in its preview pictures. They aren't linked to you.</li>
           <li><strong>Which place you're viewing</strong>, so we can connect you with others viewing the same place.</li>
           <li><strong>Your IP address</strong>, which our server receives whenever your device connects, as with any website.</li>
         </ul>
       </Section>
 
       <Section n={3} heading="How long we keep it">
-        <p>A place's drawings are kept only in our server's memory while someone is viewing that place, and are discarded once everyone has left. We don't save drawings, and we don't keep access logs of IP addresses. Your device ID stays on your device.</p>
+        <p>Drawings are kept only in our server's memory, never written to disk, and are cleared whenever the server restarts (or earlier if space runs short). We don't keep access logs of IP addresses. Your device ID stays on your device.</p>
       </Section>
 
       <Section n={4} heading="Who sees it">
         <ul>
-          <li><strong>Other people viewing the same place</strong> see your cursor and drawings live. They don't see your device ID or IP address.</li>
+          <li><strong>Other people</strong> see your cursor live, and your drawings both live and afterwards, in the place and its preview pictures. They don't see your device ID or IP address.</li>
           <li><strong>Esri</strong> provides the satellite map. To show it, your device loads map images directly from Esri, so Esri receives your IP address under its own privacy policy.</li>
           <li><strong>Our hosting provider</strong> runs the server that delivers the Service.</li>
         </ul>

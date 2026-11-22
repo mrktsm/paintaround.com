@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { MAP_LOCATIONS, PANORAMAS, panoramaThumbnail, panoramaViewUrl, type MapLocation } from '../pool/catalog';
 import { cancelPanoramaPrefetch, prefetchPanorama, queuePanoramaPrefetch } from '../pool/panoramaImages';
 import { readVisited } from '../pool/visited';
+import { onDrawnPreviewsChange, refreshDrawnPreviews } from '../pool/drawnPreviews';
 import { DARK_UI } from '../theme';
 import CityMenu, { type CityOption } from './CityMenu';
 import MobileSheet, { CitiesModal, useIsPhone, type Detent } from './MobileSheet';
@@ -61,7 +62,7 @@ function SearchPlaceRow({ loc, onOpen }: { loc: CardLocation; onOpen: (loc: Card
     <li>
       <button className="ex-search-result" onClick={() => onOpen(loc)} onPointerEnter={() => queuePanoramaPrefetch(loc.id)} onPointerLeave={() => cancelPanoramaPrefetch(loc.id)} onFocus={() => prefetchPanorama(loc.id)} onPointerDown={() => prefetchPanorama(loc.id)}>
         <span className="ex-search-result__preview">
-          {imageFailed || !loc.previewUrl ? <SearchIcon /> : <img className="ex-fade-img" ref={fadeInWhenLoaded} src={loc.previewUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />}
+          {imageFailed || !loc.previewUrl ? <SearchIcon /> : <img className="ex-fade-img" ref={fadeInWhenLoaded} src={panoramaThumbnail(loc.id) ?? loc.previewUrl} alt="" loading="lazy" onError={() => setImageFailed(true)} />}
         </span>
         <span className="ex-search-result__copy">
           <span className="ex-search-result__name">{loc.title}</span>
@@ -88,7 +89,7 @@ function VisitedPlace({ loc, onOpen }: { loc: CardLocation; onOpen: (loc: CardLo
     >
       {imageFailed || !loc.previewUrl
         ? <span className="ex-visited__fallback">{loc.title.slice(0, 1)}</span>
-        : <img className="ex-fade-img" ref={fadeInWhenLoaded} src={loc.previewUrl} alt="" loading="lazy" draggable={false} onError={() => setImageFailed(true)} />}
+        : <img className="ex-fade-img" ref={fadeInWhenLoaded} src={panoramaThumbnail(loc.id) ?? loc.previewUrl} alt="" loading="lazy" draggable={false} onError={() => setImageFailed(true)} />}
     </button>
   );
 }
@@ -321,7 +322,8 @@ function makePin(loc: Loc, label: string | null, onOpen: (l: Loc) => void): HTML
   const img = el.querySelector('img') as HTMLImageElement;
   // fade the photo in over the dark circle once it has loaded (the circle is the skeleton)
   img.addEventListener('load', () => img.classList.add('is-loaded'), { once: true });
-  img.src = loc.previewUrl;
+  img.src = panoramaThumbnail(loc.id) ?? loc.previewUrl;
+  el.dataset.place = loc.id;
   if (img.complete && img.naturalWidth) img.classList.add('is-loaded');
   el.addEventListener('pointerenter', () => queuePanoramaPrefetch(loc.id));
   el.addEventListener('pointerleave', () => cancelPanoramaPrefetch(loc.id));
@@ -378,6 +380,27 @@ export default function ExplorePage() {
   const searchInput = useRef<HTMLInputElement>(null);
   const searchTap = useRef<{ x: number; y: number; t: number } | null>(null);
   const panelScroll = useRef<HTMLDivElement>(null);
+  // Places with drawings show them in their previews: ask the server which ones (now, then every
+  // 30 s while Explore is open), re-render the cards and swap the map circles' photos.
+  const [, setDrawnRevision] = useState(0);
+  useEffect(() => {
+    const off = onDrawnPreviewsChange(() => {
+      setDrawnRevision(r => r + 1);
+      document.querySelectorAll<HTMLElement>('.ex-pin[data-place]').forEach(pin => {
+        const img = pin.querySelector('img');
+        const src = panoramaThumbnail(pin.dataset.place!);
+        if (img && src && !img.src.endsWith(src)) {
+          // keep the old photo until the new one has loaded, then switch (no flash)
+          const next = new Image();
+          next.onload = () => { img.src = src; };
+          next.src = src;
+        }
+      });
+    });
+    void refreshDrawnPreviews(true);
+    const timer = setInterval(() => { if (!document.hidden) void refreshDrawnPreviews(); }, 30000);
+    return () => { off(); clearInterval(timer); };
+  }, []);
   const panelBody = useRef<HTMLDivElement>(null);
   const [recentSearchIds, setRecentSearchIds] = useState(readRecentSearches);
   const dark = DARK_UI;
@@ -852,7 +875,7 @@ export default function ExplorePage() {
             <div className="ex-row ex-row--recents">
               {visitedPlaces.map(loc => (
                 <button key={loc.id} className="ex-recent" onClick={() => open(loc)} onPointerDown={() => prefetchPanorama(loc.id)}>
-                  <span className="ex-recent__photo">{loc.previewUrl && <img className="ex-fade-img" ref={fadeInWhenLoaded} src={loc.previewUrl} alt="" loading="lazy" draggable={false} />}</span>
+                  <span className="ex-recent__photo">{loc.previewUrl && <img className="ex-fade-img" ref={fadeInWhenLoaded} src={panoramaThumbnail(loc.id) ?? loc.previewUrl} alt="" loading="lazy" draggable={false} />}</span>
                   <span className="ex-recent__name">{loc.title}</span>
                 </button>
               ))}

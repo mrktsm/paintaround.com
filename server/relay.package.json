@@ -1,0 +1,7 @@
+{
+  "name": "streetview-realtime",
+  "private": true,
+  "type": "module",
+  "description": "Dependencies of the live-drawing relay on the server (CI copies this to its package.json and installs when it changes).",
+  "dependencies": { "sharp": "0.34.5", "ws": "8.18.0" }
+}

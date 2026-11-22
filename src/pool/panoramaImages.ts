@@ -1,4 +1,5 @@
 import { PANORAMAS, PANORAMA_BY_ID } from './catalog';
+import { drawnPreviewUrl } from './drawnPreviews';
 import type { Panorama } from './catalog';
 
 // Share downloads across map previews and viewer instances, including StrictMode
@@ -11,7 +12,9 @@ let hoverTimer: ReturnType<typeof setTimeout> | undefined;
 let hoverId: string | undefined;
 
 export function panoramaLoadingPreviewUrl(panorama: Panorama): string {
-  return panorama.thumbnailUrl?.replace(/-card\.jpg$/, '-loading.jpg') ?? panorama.previewUrl;
+  // with drawings, the loading frame shows them too (same framing as the original)
+  return drawnPreviewUrl(panorama.id, 'loading')
+    ?? panorama.thumbnailUrl?.replace(/-card\.jpg$/, '-loading.jpg') ?? panorama.previewUrl;
 }
 
 export function getPanoramaImageBuffer(url: string, abort?: Promise<void>, priority: RequestPriority = 'high'): Promise<ArrayBuffer> {

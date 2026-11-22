@@ -4,7 +4,7 @@
 import { access, mkdir, readFile, rename, statfs, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import sharp from 'sharp';
-import { renderPanoramaThumbnail } from './lib/panorama-thumbnail.mjs';
+import { renderPanoramaThumbnail } from '../shared/panoramaProjection.mjs';
 
 const headers = { 'User-Agent': 'IWasHere-PanoramaSampler/1.0 (local noncommercial prototype)' };
 const root = new URL('../', import.meta.url);

@@ -1,5 +1,5 @@
 import { readFile, writeFile, rename } from 'node:fs/promises';
-import { renderPanoramaThumbnail } from './lib/panorama-thumbnail.mjs';
+import { renderPanoramaThumbnail } from '../shared/panoramaProjection.mjs';
 
 const root=new URL('../',import.meta.url);
 const path=new URL('src/data/panorama-pool.json',root);

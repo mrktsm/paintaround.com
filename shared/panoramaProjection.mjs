@@ -1,5 +1,10 @@
+/**
+ * Panorama -> normal camera view projection, shared by the preview scripts (scripts/) and the
+ * live-drawing server (server/previews.ts, which re-renders previews with drawings on them), so
+ * both produce exactly the same framing: card view, field of view and the viewer's start zoom.
+ */
 import sharp from 'sharp';
-import { START_ZOOM } from '../../src/pool/startView.ts';
+import { START_ZOOM } from '../src/pool/startView.ts';
 
 // Normal camera views, expressed in the original panorama's basic coordinates.
 // Pixels in the full panorama are never changed; these are separate card images.
@@ -41,18 +46,26 @@ function projection(sourceWidth, sourceHeight, view) {
   return result;
 }
 
-async function renderPanoramaProjection(input, output, view) {
-  const {data,info}=await sharp(input).removeAlpha().toColourspace('srgb').raw().toBuffer({resolveWithObject:true});
+/** Project raw RGB panorama pixels into a camera view (bilinear), returning raw RGB. */
+export function projectRaw(data, info, view) {
   const map=projection(info.width,info.height,view);
+  const ch=info.channels ?? 3;
   const target=Buffer.alloc(view.width*view.height*3);
   for (let i=0; i<view.width*view.height; i++) {
     const wx=map.fx[i], wy=map.fy[i];
+    const a=map.i00[i]/3*ch, b=map.i01[i]/3*ch, c2=map.i10[i]/3*ch, d=map.i11[i]/3*ch;
     for (let c=0;c<3;c++) {
-      const top=data[map.i00[i]+c]*(1-wx)+data[map.i01[i]+c]*wx;
-      const bottom=data[map.i10[i]+c]*(1-wx)+data[map.i11[i]+c]*wx;
+      const top=data[a+c]*(1-wx)+data[b+c]*wx;
+      const bottom=data[c2+c]*(1-wx)+data[d+c]*wx;
       target[i*3+c]=Math.round(top*(1-wy)+bottom*wy);
     }
   }
+  return target;
+}
+
+async function renderPanoramaProjection(input, output, view) {
+  const {data,info}=await sharp(input).removeAlpha().toColourspace('srgb').raw().toBuffer({resolveWithObject:true});
+  const target=projectRaw(data,info,view);
   await sharp(target,{raw:{width:view.width,height:view.height,channels:3}}).jpeg({quality:88}).toFile(output);
   return view;
 }
@@ -60,12 +73,16 @@ async function renderPanoramaProjection(input, output, view) {
 // Mapillary's default spherical view has a 90° vertical FOV at zoom zero.
 // A wide loading frame preserves that vertical coverage when cropped to a
 // desktop or phone viewport. The regular card composition stays unchanged.
-export async function renderPanoramaLoadingPreview(input, output, id, center = {}) {
+/** The wide loading frame's view: same centre as the card, at the viewer's start zoom. */
+export function loadingViewFor(id, center = {}) {
   const width = 1920, height = 480;
   // The viewer opens at START_ZOOM: tan(fov / 2) shrinks by 2^zoom from the widest view.
   const scale = 2 ** START_ZOOM;
-  const view = { ...thumbnailViewFor(id), u: center.u ?? thumbnailViewFor(id).u, v: center.v ?? thumbnailViewFor(id).v, width, height, horizontalFov: 2 * Math.atan(width / height / scale) * 180 / Math.PI };
-  return renderPanoramaProjection(input, output, view);
+  return { ...thumbnailViewFor(id), u: center.u ?? thumbnailViewFor(id).u, v: center.v ?? thumbnailViewFor(id).v, width, height, horizontalFov: 2 * Math.atan(width / height / scale) * 180 / Math.PI };
+}
+
+export async function renderPanoramaLoadingPreview(input, output, id, center = {}) {
+  return renderPanoramaProjection(input, output, loadingViewFor(id, center));
 }
 
 export async function renderPanoramaThumbnail(input, output, id) {

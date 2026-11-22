@@ -7,6 +7,6 @@ export default defineConfig({
   base: '/',
   server: {
     // live drawing server (npm run server); production gets the same path via Caddy
-    proxy: { '/ws': { target: 'ws://127.0.0.1:8787', ws: true } },
+    proxy: { '/ws': { target: 'ws://127.0.0.1:8787', ws: true }, '/api': { target: 'http://127.0.0.1:8787' } },
   },
 })

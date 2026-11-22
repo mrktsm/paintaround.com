@@ -1,3 +1,4 @@
+import { drawnPreviewUrl } from './drawnPreviews';
 import data from '../data/panorama-pool.json';
 
 export type Panorama = {
@@ -61,5 +62,8 @@ export function panoramaViewUrl(id: string) {
 
 export function panoramaThumbnail(id: string, full = false): string | null {
   const panorama = PANORAMA_BY_ID.get(id);
-  return panorama ? (panorama.thumbnailUrl || (full ? panorama.imageUrl : panorama.previewUrl)) : null;
+  if (!panorama) return null;
+  // a place with drawings shows them in its preview (same framing as the original card)
+  if (!full) { const drawn = drawnPreviewUrl(id, 'card'); if (drawn) return drawn; }
+  return panorama.thumbnailUrl || (full ? panorama.imageUrl : panorama.previewUrl);
 }

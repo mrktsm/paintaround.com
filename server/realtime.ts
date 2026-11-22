@@ -1,12 +1,16 @@
 /**
  * Live drawing relay. One room per panorama; relays cursors and strokes to everyone else in the
- * room and keeps the room's finished strokes in memory (nothing touches disk) so people who join
- * later see what's already been drawn. A room is forgotten when its last person leaves.
+ * room and keeps the room's finished strokes in memory (nothing touches disk) so people who come
+ * later see what's been drawn. Drawings stay as long as the server runs (a restart clears them),
+ * within a total memory budget. Also serves previews with the drawings on them (server/previews).
  *
  * Run:  node server/realtime.ts           (Node 23.6+, types stripped natively)
- * Env:  PORT (8787), HOST (127.0.0.1), ALLOWED_ORIGINS (comma list; default: the site + localhost)
+ * Env:  PORT (8787), HOST (127.0.0.1), ALLOWED_ORIGINS (comma list; default: the site + localhost),
+ *       PANO_DIR (panorama images for previews; default ../public/panorama-pool/)
  */
 import { randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
+import { getPreview, previewManifest, schedulePreview } from './previews.ts';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { LIMITS, PEER_COLORS, type ClientMessage, type FinishedStroke, type Peer, type ServerMessage } from '../shared/realtime.ts';
 
@@ -33,6 +37,27 @@ interface Room {
   clients: Set<Client>;
   strokes: Map<string, { stroke: FinishedStroke; bytes: number }>;
   bytes: number;
+  /** last time someone drew or erased here (oldest rooms give way when memory runs short) */
+  touched: number;
+}
+
+/** All rooms' strokes together stay under this (oldest strokes of the least recent rooms go). */
+const TOTAL_STROKE_BYTES = Number(process.env.TOTAL_STROKE_BYTES ?? 2 * 1024 ** 3);
+let totalBytes = 0;
+const roomStrokes = (room: Room) => () => [...room.strokes.values()].map(s => s.stroke);
+function trimMemory(keep: Room) {
+  while (totalBytes > TOTAL_STROKE_BYTES) {
+    let oldest: Room | null = null;
+    for (const r of rooms.values()) if (r !== keep && r.strokes.size && (!oldest || r.touched < oldest.touched)) oldest = r;
+    const victim = oldest ?? keep;
+    const first = victim.strokes.keys().next();
+    if (first.done) return;
+    const s = victim.strokes.get(first.value)!;
+    victim.strokes.delete(first.value);
+    victim.bytes -= s.bytes;
+    totalBytes -= s.bytes;
+    schedulePreview(victim.id, roomStrokes(victim));
+  }
 }
 
 const rooms = new Map<string, Room>();
@@ -51,8 +76,9 @@ function leave(c: Client) {
   if (!room) return;
   room.clients.delete(c);
   c.room = null;
-  if (room.clients.size === 0) rooms.delete(room.id);
-  else broadcast(room, c, { t: 'peer_leave', id: c.peer.id });
+  // the room (and its drawings) stays when the last person leaves; only empty rooms are dropped
+  if (room.clients.size === 0 && room.strokes.size === 0) rooms.delete(room.id);
+  else if (room.clients.size) broadcast(room, c, { t: 'peer_leave', id: c.peer.id });
 }
 
 function join(c: Client, roomId: string, preferred?: string) {
@@ -60,7 +86,7 @@ function join(c: Client, roomId: string, preferred?: string) {
   leave(c);
   let room = rooms.get(roomId);
   if (room && room.clients.size >= LIMITS.maxPeersPerRoom) return send(c, { t: 'error', reason: 'room_full' });
-  if (!room) rooms.set(roomId, (room = { id: roomId, clients: new Set(), strokes: new Map(), bytes: 0 }));
+  if (!room) rooms.set(roomId, (room = { id: roomId, clients: new Set(), strokes: new Map(), bytes: 0, touched: Date.now() }));
   // keep the person's own colour unless someone in the room already has it
   const taken = new Set([...room.clients].map(o => o.peer.color));
   const wanted = preferred && (PEER_COLORS as readonly string[]).includes(preferred) ? preferred : c.peer.color;
@@ -154,17 +180,22 @@ function handle(c: Client, raw: string) {
       const stroke = m.stroke;
       const bytes = stroke.image.length;
       const old = room.strokes.get(stroke.id);
-      if (old) room.bytes -= old.bytes;
+      if (old) { room.bytes -= old.bytes; totalBytes -= old.bytes; }
       room.strokes.delete(stroke.id); // re-insert = newest (redo)
       room.strokes.set(stroke.id, { stroke, bytes });
       room.bytes += bytes;
+      totalBytes += bytes;
+      room.touched = now;
       // drop the oldest strokes beyond the room's memory budget
       for (const [id, s] of room.strokes) {
         if (room.strokes.size <= LIMITS.maxStrokesPerRoom && room.bytes <= LIMITS.maxRoomStrokeBytes) break;
         room.strokes.delete(id);
         room.bytes -= s.bytes;
+        totalBytes -= s.bytes;
       }
+      trimMemory(room);
       broadcast(room, c, { t: 'stroke_done', stroke, from });
+      schedulePreview(room.id, roomStrokes(room));
       return;
     }
     case 'erase': {
@@ -172,17 +203,41 @@ function handle(c: Client, raw: string) {
       const ids = m.ids.filter(id => isStr(id, 64)).slice(0, 500);
       for (const id of ids) {
         const s = room.strokes.get(id);
-        if (s) { room.bytes -= s.bytes; room.strokes.delete(id); }
+        if (s) { room.bytes -= s.bytes; totalBytes -= s.bytes; room.strokes.delete(id); }
       }
-      if (ids.length) broadcast(room, c, { t: 'erase', ids, from });
+      if (ids.length) {
+        room.touched = Date.now();
+        broadcast(room, c, { t: 'erase', ids, from });
+        schedulePreview(room.id, roomStrokes(room));
+      }
       return;
     }
   }
 }
 
+// HTTP: previews with drawings (the site proxies /api/ here)
+//   GET /api/previews                 -> { [placeId]: version } for places whose preview has drawings
+//   GET /api/previews/<id>/card|loading -> the JPEG
+const http = createServer((req, res) => {
+  const url = new URL(req.url ?? '/', 'http://x');
+  const cors = { 'access-control-allow-origin': '*' };
+  if (req.method !== 'GET') { res.writeHead(405, cors).end(); return; }
+  if (url.pathname === '/api/previews') {
+    res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify(previewManifest()));
+    return;
+  }
+  const m = url.pathname.match(/^\/api\/previews\/([\w.-]{1,128})\/(card|loading)$/);
+  const p = m && getPreview(m[1]);
+  if (!p) { res.writeHead(404, cors).end(); return; }
+  // versioned URLs (?v=) never change, so they can be cached for good
+  res.writeHead(200, { ...cors, 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=31536000, immutable' });
+  res.end(m![2] === 'card' ? p.card : p.loading);
+});
+http.listen(PORT, HOST);
+
 const wss = new WebSocketServer({
-  host: HOST,
-  port: PORT,
+  server: http,
   path: '/ws',
   maxPayload: LIMITS.maxMessageBytes,
   perMessageDeflate: false,
@@ -211,7 +266,7 @@ setInterval(() => {
   }
 }, 30_000);
 
-wss.on('listening', () => console.log(`[realtime] listening on ws://${HOST}:${PORT}/ws`));
-const stop = () => { wss.close(); process.exit(0); };
+http.on('listening', () => console.log(`[realtime] listening on http://${HOST}:${PORT} (ws /ws, previews /api/previews)`));
+const stop = () => { wss.close(); http.close(); process.exit(0); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);

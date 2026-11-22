@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { renderPanoramaLoadingPreview } from './lib/panorama-thumbnail.mjs';
+import { renderPanoramaLoadingPreview } from '../shared/panoramaProjection.mjs';
 
 const root = new URL('../', import.meta.url);
 const pool = JSON.parse(await readFile(new URL('src/data/panorama-pool.json', root), 'utf8'));

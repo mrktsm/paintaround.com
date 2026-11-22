@@ -2,7 +2,7 @@ import LegalPage, { Section } from './legal/LegalPage';
 
 export default function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="November 21, 2026">
+    <LegalPage title="Terms of Service" updated="November 22, 2026">
       <p>These Terms of Service (the "Terms") govern your use of paintaround at paintaround.com (the "Service"), where you explore 360° photos of real places and draw on them live, together with whoever else is looking at the same place.</p>
 
       <Section n={1} heading="Agreement">
@@ -10,7 +10,7 @@ export default function Terms() {
       </Section>
 
       <Section n={2} heading="How the Service works">
-        <p>There are no accounts. Anyone can open a place and draw on it. Everyone viewing the same place sees each other's cursors and drawings as they happen. Drawings are live only: they are kept in memory while someone is viewing that place and are gone once everyone has left. We don't save them.</p>
+        <p>There are no accounts. Anyone can open a place and draw on it. Everyone viewing the same place sees each other's cursors and drawings as they happen. Drawings stay on a place after you leave, so others who come later can see them, and they appear in that place's preview pictures. They are kept in our server's memory, not saved permanently, and may be cleared at any time, for example when the server restarts.</p>
         <p>Each device gets a free amount of ink, which refills over time. Ink is a usage limit only: it can't be bought, sold or exchanged, and has no monetary value.</p>
       </Section>
 
@@ -25,8 +25,8 @@ export default function Terms() {
       </Section>
 
       <Section n={4} heading="Your drawings">
-        <p>You keep whatever rights you have in your drawings. By drawing, you let us show them live to other people viewing the same place, for as long as they stay in that place's live session. You can erase your own drawings; you can't erase anyone else's.</p>
-        <p>You are responsible for what you draw. Other people may see it, and may take screenshots, while it is live.</p>
+        <p>You keep whatever rights you have in your drawings. By drawing, you let us show them to other people viewing that place, including in its preview pictures, for as long as they are kept. You can erase your own drawings; you can't erase anyone else's.</p>
+        <p>You are responsible for what you draw. Other people may see it, and may take screenshots, while it is shown.</p>
       </Section>
 
       <Section n={5} heading="Enforcement">

@@ -20,6 +20,7 @@ class RealtimeClient {
   private room: string | null = null;
   private listeners = new Set<Listener>();
   private retry = 0;
+  private joins = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Our id in the current room (from the server's welcome). */
   me: string | null = null;
@@ -54,6 +55,7 @@ class RealtimeClient {
 
   /** Enter a panorama's room (leaves the previous one). */
   join(room: string): void {
+    this.joins++;
     this.room = room;
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify({ t: 'join', room, color: MY_COLOR } satisfies ClientMessage));
     else this.connect();
@@ -66,6 +68,15 @@ class RealtimeClient {
     this.ws?.close();
     this.ws = null;
   }
+
+  /** Leave once this is done (the last strokes are still being encoded), unless another room is joined first. */
+  leaveAfter(done: Promise<unknown>): void {
+    const joins = this.joins;
+    void done.finally(() => { if (this.joins === joins) this.leave(); });
+  }
+
+  /** The room we're in. */
+  get current(): string | null { return this.room; }
 
   send(msg: ClientMessage): void {
     if (this.ws?.readyState === WebSocket.OPEN && this.room) this.ws.send(JSON.stringify(msg));

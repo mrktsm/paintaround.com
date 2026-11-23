@@ -5,6 +5,13 @@
  * their original preview images.
  */
 const versions = new Map<string, number>();
+/**
+ * Previews of your own drawings, made in this browser when you left the place (localPreview.ts).
+ * Shown for a while even if the server has a newer one: its version may still lack your strokes
+ * (they are checked and rendered after you stop). After that, the newest wins.
+ */
+const local = new Map<string, { card: string; loading: string; at: number }>();
+const LOCAL_FIRST_MS = 90_000;
 const listeners = new Set<() => void>();
 let inflight: Promise<void> | null = null;
 let lastFetch = 0;
@@ -34,9 +41,21 @@ export function onDrawnPreviewsChange(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+export function setLocalPreview(id: string, card: Blob, loading: Blob): void {
+  const old = local.get(id);
+  local.set(id, { card: URL.createObjectURL(card), loading: URL.createObjectURL(loading), at: Date.now() });
+  for (const l of listeners) l();
+  // pages still showing the old one get a moment to switch
+  if (old) setTimeout(() => { URL.revokeObjectURL(old.card); URL.revokeObjectURL(old.loading); }, 10_000);
+  // then the server's may take over: check again, and let pages re-read
+  setTimeout(() => { void refreshDrawnPreviews(true).then(() => { for (const l of listeners) l(); }); }, LOCAL_FIRST_MS + 500);
+}
+
 /** URL of a place's card / loading image with its drawings, or null if it has none. */
 export function drawnPreviewUrl(id: string, kind: 'card' | 'loading'): string | null {
   const v = versions.get(id);
+  const own = local.get(id);
+  if (own && (!v || v < own.at || Date.now() - own.at < LOCAL_FIRST_MS)) return own[kind];
   return v ? `/api/previews/${encodeURIComponent(id)}/${kind}?v=${v}` : null;
 }
 

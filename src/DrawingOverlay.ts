@@ -9,8 +9,11 @@ import { supabase, LOCAL_MODE } from "./supabaseClient";
 import { deviceId } from "./inkManager";
 import { applyShading, shadeRegion } from "./deep/strokeShading";
 import { SurfaceDecal, loadDeepData, surfaceRing, type DeepData } from "./deep/surfaceDecal";
-import { GeodesicMap } from "./deep/geodesicMap";
+import { GeodesicMap, mergePieces, pieceGrid, type BakedPiece } from "./deep/geodesicMap";
+import { DecalLayer, makeDecalTool, preloadDecalTools, simplify, type DecalTool, type ToolType } from "./deep/decalTools";
+import { mulberry32, pencilGrain, pencilLook, strokeToPolygon, WCPoly, type Vec2 } from "./deep/brushParts";
 import { realtime } from "./realtime/client";
+import type { PreviewView } from "./pool/localPreview";
 import { PAINT_LAYER, type CursorState, type FinishedStroke, type LayerTiles, type ServerMessage } from "../shared/realtime";
 
 /** Resolve 'rainbow' into a concrete CSS color using the same continuous
@@ -33,25 +36,10 @@ type Unprojector = (
 interface SplashParticle {
   basicX: number;
   basicY: number;
-  /** tool-space position, set when the brush paints in a fixed space (a 3D surface decal) */
-  x?: number;
-  y?: number;
   radius: number;
   life: number;
   color: string;
   strokeId?: string;
-}
-
-/** Small seeded PRNG (mulberry32): same seed -> same sequence on every device. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 class Hair {
@@ -254,20 +242,6 @@ class Brush {
   splashing: boolean = true;
   dripping: boolean = false; // drips off (splatters stay) — they looked wrong on 3D surfaces
   referenceFov: number = 90;
-  /**
-   * Painting in a fixed space (a 3D surface decal) instead of on screen: splatters stay at their
-   * tool-space spot and are painted with the stroke (lit, on the surface, baked in for good).
-   */
-  fixedSpace = false;
-  private _splashesMarked = 0;
-
-  /** Splatters added since the last call (so the surface can be opened up for paint there). */
-  takeNewSplashes(): SplashParticle[] {
-    const out = this._splashes.slice(this._splashesMarked);
-    this._splashesMarked = this._splashes.length;
-    return out;
-  }
-
   private _strokeId: string | null = null;
   private _tip: Hair[] = [];
   private _drops: Drop[] = [];
@@ -410,9 +384,7 @@ class Brush {
 
     // Batch splash projections for performance
     if (this._splashes.length > 0) {
-      const splashPositions = this.fixedSpace
-        ? this._splashes.map((s) => [s.x!, s.y!] as [number, number])
-        : await Promise.all(this._splashes.map((s) => this._projector([s.basicX, s.basicY])));
+      const splashPositions = await Promise.all(this._splashes.map((s) => this._projector([s.basicX, s.basicY])));
 
       for (let i = 0; i < this._splashes.length; i++) {
         const splash = this._splashes[i];
@@ -496,12 +468,8 @@ class Brush {
             splashScreenPositions.push({ sx, sy, sr });
           }
 
-          if (this.fixedSpace) {
-            for (const p of splashScreenPositions)
-              this._splashes.push({ basicX: 0, basicY: 0, x: p.sx, y: p.sy, radius: p.sr, life: 1, color: this.color, strokeId: this._strokeId || undefined });
-          }
           // Batch unproject all splash positions
-          const basicPositions = this.fixedSpace ? [] : await Promise.all(
+          const basicPositions = await Promise.all(
             splashScreenPositions.map((p) => this._unprojector([p.sx, p.sy])),
           );
 
@@ -627,49 +595,6 @@ class Brush {
       if (hair) tip.push(hair);
     }
   }
-}
-
-// ── Pencil grain: real scanned paper (David Revoy, CC0) as the graphite's tooth ──
-type PencilLook = { src: string; scale: number; lo: number; hi: number; floor: number; width: number };
-/** Bold graphite on speckled drawing paper (chosen over softer/fibre variants, Nov 2026). */
-const PENCIL_LOOK: PencilLook = { src: "/textures/paper-grain.png", scale: 0.35, lo: 0.3, hi: 0.7, floor: 0.12, width: 1.0 };
-function pencilLook(): PencilLook {
-  return PENCIL_LOOK;
-}
-const _grainMasks = new Map<string, HTMLCanvasElement | null>();
-/** The look's grain as an alpha mask pattern (null until the texture has loaded). */
-function pencilGrain(ctx: CanvasRenderingContext2D, look: PencilLook): CanvasPattern | null {
-  const key = `${look.src}|${look.lo}|${look.hi}|${look.floor}`;
-  if (!_grainMasks.has(key)) {
-    _grainMasks.set(key, null);
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas");
-      c.width = img.width;
-      c.height = img.height;
-      const g = c.getContext("2d", { willReadFrequently: true })!;
-      g.drawImage(img, 0, 0);
-      const d = g.getImageData(0, 0, c.width, c.height);
-      for (let i = 0; i < d.data.length; i += 4) {
-        // bright = paper peak = graphite catches; dark = valley = paper shows through
-        const v = d.data[i] / 255;
-        const t = Math.min(1, Math.max(0, (v - look.lo) / (look.hi - look.lo)));
-        d.data[i] = d.data[i + 1] = d.data[i + 2] = 255;
-        d.data[i + 3] = Math.round(255 * (look.floor + (1 - look.floor) * t * t * (3 - 2 * t)));
-      }
-      g.putImageData(d, 0, 0);
-      _grainMasks.set(key, c);
-    };
-    img.src = look.src;
-  }
-  const mask = _grainMasks.get(key);
-  if (!mask) return null;
-  const pat = ctx.createPattern(mask, "repeat");
-  if (!pat) return null;
-  // patterns are anchored to user space at fill time, i.e. drawing-space 0,0 (the surface
-  // decal), so the grain stays put under the pen
-  pat.setTransform(new DOMMatrix([look.scale, 0, 0, look.scale, 0, 0]));
-  return pat;
 }
 
 class Pen {
@@ -803,6 +728,7 @@ class Pen {
         this._history.map((p) => this._projector([p.basicX, p.basicY])),
       );
 
+      const widths = this._history.map((p) => p.width);
       const validPoints: [number, number][] = [];
       for (const p of projectedPoints) {
         if (p) validPoints.push([p[0], p[1]]);
@@ -818,7 +744,7 @@ class Pen {
         // drawing space (the surface decal), so it never slides with the pen.
         const pts: [number, number, number][] = [];
         projectedPoints.forEach((p, i) => {
-          if (p) pts.push([p[0], p[1], this._history[i].width * fovScale * look.width]);
+          if (p) pts.push([p[0], p[1], (widths[i] ?? this.size) * fovScale * look.width]);
         });
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
         for (const [x, y, w] of pts) {
@@ -1017,6 +943,7 @@ class ChalkBrush {
     color: string,
   ): void {
     ctx.fillStyle = color;
+    ctx.beginPath(); // all dots in one path: one fill instead of thousands
 
     let currentX = 0;
     let currentY = 2.2;
@@ -1025,13 +952,13 @@ class ChalkBrush {
         currentX * currentX + currentY * currentY <
         (radius / 2) * (radius / 2)
       ) {
-        ctx.beginPath();
+        ctx.moveTo(cx + currentX + 1, cy + currentY);
         ctx.arc(cx + currentX, cy + currentY, 1, 0, Math.PI * 2);
-        ctx.fill();
       }
       currentX += this._rand() * 2 - 1;
       currentY += this._rand() * 2 - 1;
     }
+    ctx.fill();
   }
 
   async render(
@@ -1080,7 +1007,7 @@ class ChalkBrush {
         this._stamp(this._offCtx, x, y, radius, this.color);
       } else {
         const spacing = Math.max(2, radius / 6);
-        const steps = Math.min(50, Math.max(1, Math.ceil(stampDist / spacing)));
+        const steps = Math.min(100, Math.max(1, Math.ceil(stampDist / spacing)));
         for (let s = 0; s <= steps; s++) {
           const t = s / steps;
           const ix = this._lastStampX + (x - this._lastStampX) * t;
@@ -1141,99 +1068,6 @@ class ChalkBrush {
 // ---------------------------------------------------------------------------
 // Watercolor brush — ported from p5.js "water colour" by BarneyCodes
 // ---------------------------------------------------------------------------
-
-interface Vec2 {
-  x: number;
-  y: number;
-}
-
-function vecSub(a: Vec2, b: Vec2): Vec2 {
-  return { x: a.x - b.x, y: a.y - b.y };
-}
-function vecAdd(a: Vec2, b: Vec2): Vec2 {
-  return { x: a.x + b.x, y: a.y + b.y };
-}
-function vecMult(v: Vec2, s: number): Vec2 {
-  return { x: v.x * s, y: v.y * s };
-}
-function vecMag(v: Vec2): number {
-  return Math.sqrt(v.x * v.x + v.y * v.y);
-}
-function vecSetMag(v: Vec2, m: number): Vec2 {
-  const mag = vecMag(v);
-  if (mag === 0) return { x: 0, y: 0 };
-  return { x: (v.x / mag) * m, y: (v.y / mag) * m };
-}
-function vecRotate(v: Vec2, angle: number): Vec2 {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-  return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
-}
-
-/** Cubic distribution biased toward center — makes edge deformation organic. */
-function wcDistribute(x: number): number {
-  return Math.pow((x - 0.5) * 1.58740105, 3) + 0.5;
-}
-function wcRand(rand: () => number): number {
-  return wcDistribute(rand());
-}
-
-class WCPoly {
-  vertices: Vec2[];
-  modifiers: number[];
-  readonly rand: () => number;
-
-  constructor(vertices: Vec2[], modifiers?: number[], rand: () => number = Math.random) {
-    this.vertices = vertices;
-    this.rand = rand;
-    if (modifiers) {
-      this.modifiers = modifiers;
-    } else {
-      this.modifiers = vertices.map(() => 0.1 + this.rand() * 0.7);
-    }
-  }
-
-  grow(): WCPoly {
-    const grownVerts: Vec2[] = [];
-    const grownMods: number[] = [];
-    for (let i = 0; i < this.vertices.length; i++) {
-      const j = (i + 1) % this.vertices.length;
-      const v1 = this.vertices[i];
-      const v2 = this.vertices[j];
-      const mod = this.modifiers[i];
-
-      const chmod = (m: number) => m + (wcRand(this.rand) - 0.5) * 0.1;
-
-      grownVerts.push(v1);
-      grownMods.push(chmod(mod));
-
-      const segment = vecSub(v2, v1);
-      const len = vecMag(segment);
-      const scaled = vecMult(segment, wcRand(this.rand));
-      const v = vecAdd(scaled, v1);
-
-      const rotated = vecRotate(segment, -Math.PI / 2 + (wcRand(this.rand) - 0.5) * Math.PI / 4);
-      const displaced = vecSetMag(rotated, wcRand(this.rand) * len / 2 * mod);
-      v.x += displaced.x;
-      v.y += displaced.y;
-
-      grownVerts.push(v);
-      grownMods.push(chmod(mod));
-    }
-    return new WCPoly(grownVerts, grownMods, this.rand);
-  }
-
-  draw(ctx: CanvasRenderingContext2D): void {
-    if (this.vertices.length < 3) return;
-    ctx.beginPath();
-    ctx.moveTo(this.vertices[0].x, this.vertices[0].y);
-    for (let i = 1; i < this.vertices.length; i++) {
-      ctx.lineTo(this.vertices[i].x, this.vertices[i].y);
-    }
-    ctx.closePath();
-    ctx.fill();
-  }
-}
 
 /**
  * Fountain pen brush — variable-width calligraphic strokes.
@@ -1403,7 +1237,7 @@ class FountainPenBrush {
           width: strokeWidth,
         });
         if (this._history.length > 500) this._history.shift();
-        if (this._inputPoints.length > 500) this._inputPoints.shift();
+        if (this._inputPoints.length > 3000) this._inputPoints.shift();
 
         this._drawStroke();
       }
@@ -1474,48 +1308,6 @@ class FountainPenBrush {
   updateColor(newColor: string): void {
     this.color = newColor;
   }
-}
-
-/**
- * Build a closed polygon outlining a stroke path with given width.
- * Returns vertices tracing the left side forward, then right side backward.
- */
-function strokeToPolygon(points: Vec2[], width: number): Vec2[] {
-  if (points.length < 2) return [];
-
-  const left: Vec2[] = [];
-  const right: Vec2[] = [];
-  const halfW = width / 2;
-
-  for (let i = 0; i < points.length; i++) {
-    let dx: number, dy: number;
-
-    if (i === 0) {
-      dx = points[1].x - points[0].x;
-      dy = points[1].y - points[0].y;
-    } else if (i === points.length - 1) {
-      dx = points[i].x - points[i - 1].x;
-      dy = points[i].y - points[i - 1].y;
-    } else {
-      dx = points[i + 1].x - points[i - 1].x;
-      dy = points[i + 1].y - points[i - 1].y;
-    }
-
-    const mag = Math.sqrt(dx * dx + dy * dy);
-    if (mag === 0) {
-      left.push(points[i]);
-      right.push(points[i]);
-      continue;
-    }
-
-    const nx = -dy / mag * halfW;
-    const ny = dx / mag * halfW;
-
-    left.push({ x: points[i].x + nx, y: points[i].y + ny });
-    right.push({ x: points[i].x - nx, y: points[i].y - ny });
-  }
-
-  return [...left, ...right.reverse()];
 }
 
 /**
@@ -1926,31 +1718,43 @@ function isBlank(canvas: HTMLCanvasElement): boolean {
 /** Someone else's surface stroke, replayed live with their brush (see replayStart). */
 interface Replay {
   st: DecalState;
-  tool: { render(ctx: CanvasRenderingContext2D, x: number, y: number, fov: number): unknown; getBounds(): { minX: number; minY: number; maxX: number; maxY: number }; dispose(): void };
   group?: number;
   ended: boolean;
   dead: boolean;
-  /** tool work runs strictly in order (each step awaits the last) */
-  chain: Promise<void>;
+  /** points of a frame whose last point hasn't arrived yet */
+  mids: [number, number][];
+  /** the finished piece, baked when it ended (its surface map is freed) */
+  tex: MarkerTexture | null;
   timer?: ReturnType<typeof setTimeout>;
 }
 
-/** A stroke being drawn on a 3D surface decal (see deep/surfaceDecal). */
+/** Added to a sample's decal x when more points of the same frame follow (decal x is < 2048). */
+const MID_SAMPLE = 8192;
+
+/** A point of the path on the surface: where in the panorama, where on the decal, where on screen. */
+interface PathPoint { basic: [number, number]; decal: [number, number]; screen: [number, number] }
+
+/** A stroke piece being drawn on a 3D surface (see deep/geodesicMap, deep/decalTools). */
 interface DecalState {
-  geo: GeodesicMap; // continuous surface unwrap for this stroke (decal space <-> panorama)
+  geo: GeodesicMap; // continuous surface unwrap for this piece (decal space <-> panorama)
   surface: Float32Array; // panorama paint multiplier (shadows + texture)
-  toolCrop: HTMLCanvasElement; // crop of the tool drawing, uploaded to the GPU each frame
-  toolRect: [number, number, number, number]; // crop rect in decal px
-  hasLive: boolean;
-  toolVersion: number; // bumped each time the tool drawing is re-rendered
+  layer: DecalLayer; // the brush's drawing on the unwrapped sheet
+  tool: DecalTool;
+  toolType: ToolType;
+  seed: number;
+  params: { color: string; lineWidth: number; toolType: ToolType };
   geom: { key: string; basic: Float32Array; tex: Float32Array } | null; // cached draw geometry
-  x: number; // current tool position in decal px
-  y: number;
-  fov: number; // fov at stroke start (tools render at fovScale 1 in decal space)
-  offFrames: number; // consecutive frames the cursor couldn't be reached along the surface
+  fov: number; // fov at stroke start
   group: number; // stroke group id (shared by all pieces of a stroke)
   nearRadius: number; // paintable radius around the drawn path, in decal px (~brush half-width + margin)
-  prev: { basic: [number, number]; decal: [number, number] } | null; // last cursor sample on the surface
+  prev: PathPoint; // last path point on the surface
+  painted: [number, number]; // last decal point handed to the brush
+  marked: [number, number]; // last decal point marked paintable
+  track: PathPoint[]; // points since then
+  off: [number, number][]; // screen points off this piece's surface, not placed yet
+  gap: boolean; // the path left the surface (sky) since prev
+  hasPaint: boolean;
+  cells: Map<number, [number, number]>; // where in the panorama each bit of the sheet was painted
   start: [number, number]; // panorama point the decal was built at
 }
 
@@ -1984,28 +1788,24 @@ export class DrawingOverlay {
     lastX: number;
     lastY: number;
     fov: number;
-    decal?: DecalState;
   }[] = [];
   private dyingPenStrokes: {
     pen: Pen | ChalkBrush | FountainPenBrush | WatercolorBrush;
     lastX: number;
     lastY: number;
     fov: number;
-    decal?: DecalState;
   }[] = [];
   private finalizingStrokes: {
     brush: Brush;
     lastX: number;
     lastY: number;
     fov: number;
-    decal?: DecalState;
   }[] = [];
   private finalizingPenStrokes: {
     pen: Pen | ChalkBrush | FountainPenBrush | WatercolorBrush;
     lastX: number;
     lastY: number;
     fov: number;
-    decal?: DecalState;
   }[] = [];
   private pendingTextures: {
     stroke: any;
@@ -2030,8 +1830,13 @@ export class DrawingOverlay {
   private _activeDecal: DecalState | null = null;
   /** Params of the stroke in progress, so it can continue on a new surface (decal chaining). */
   private _strokeGroup = 0;
-  /** Pre-built decal for the next segment when a stroke chains onto a new surface. */
-  private _chainDecal: DecalState | null = null;
+  /** Screen points of the current surface stroke not walked yet, and where the walk is. */
+  private _decalPath: [number, number][] = [];
+  private _decalPos: [number, number] = [0, 0];
+  /** Finished pieces of the stroke in progress (merged into one bitmap when it ends). */
+  private _pieces: { piece: BakedPiece; tex: MarkerTexture }[] = [];
+  /** when recent pieces started: many in a row = a ragged area, so be less eager to split there */
+  private _chainTimes: number[] = [];
   private _strokeParams: { color: string; lineWidth: number; toolType: "pencil" | "marker" | "crayon" | "fountainPen" | "watercolor" } | null = null;
   private _loadedStrokeIds: Set<string> = new Set();
   private _prefetchedTextures: Map<string, MarkerTexture[]> = new Map();
@@ -2091,6 +1896,7 @@ export class DrawingOverlay {
   }
 
   constructor(container: HTMLElement) {
+    preloadDecalTools();
     this._container = container;
     this.canvas = document.createElement("canvas");
     this.canvas.style.position = "absolute";
@@ -2205,7 +2011,8 @@ export class DrawingOverlay {
    */
   private renderGPUTexturesOnly(): void {
     const live = this.liveDecals();
-    if (!this.viewer || !this.webglRenderer || (this.markerTextures.length === 0 && live.length === 0))
+    const list = this.drawList();
+    if (!this.viewer || !this.webglRenderer || (list.length === 0 && live.length === 0))
       return;
 
     const gpuUniforms = this.getGPUProjectionUniforms();
@@ -2233,7 +2040,7 @@ export class DrawingOverlay {
     }
 
     // Second pass: all textures normally
-    for (const tex of this.markerTextures) {
+    for (const tex of list) {
       if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
       if (!tex._gpuVertexCount) continue;
 
@@ -2521,7 +2328,9 @@ export class DrawingOverlay {
   leaveRealtime(): void {
     this.unsubscribeFromRealtime();
     this._liveRoom = null;
-    realtime.leave();
+    // a stroke finished just now may still be encoding: let it reach the room first
+    if (this._sharing.size) realtime.leaveAfter(Promise.race([Promise.allSettled(this._sharing), new Promise((r) => setTimeout(r, 3000))]));
+    else realtime.leave();
   }
 
   unsubscribeFromRealtime(): void {
@@ -2589,10 +2398,11 @@ export class DrawingOverlay {
         // the finished, lit bitmap replaces the live line once the whole stroke is over
         const from = msg.from, group = msg.stroke.strokeGroup;
         // the replayed copy is pixel-identical: swap once the bitmap is on screen
-        const replay = this._replays.get(from)?.find((r) => r.ended && (group === undefined || r.group === group));
-        if (replay) clearTimeout(replay.timer);
+        // (every piece of it: one bitmap holds the whole stroke)
+        const replays = (this._replays.get(from) ?? []).filter((r) => r.ended && (group === undefined || r.group === group));
+        for (const r of replays) clearTimeout(r.timer);
         void this.addLiveStroke(msg.stroke).then(() => {
-          if (replay) requestAnimationFrame(() => this.dropReplay(from, replay));
+          requestAnimationFrame(() => { for (const r of replays) this.dropReplay(from, r); });
           const rp = this._remotePreviews.get(from);
           if (rp && rp.ended && (group === undefined || rp.group === undefined || rp.group === group)) this.remotePreviewEnd(from);
         });
@@ -2628,6 +2438,7 @@ export class DrawingOverlay {
 
   /** Tell the room these finished strokes are gone (undo / eraser). */
   private broadcastEraseStrokes(textures: MarkerTexture[]): void {
+    this._ownChanges = true;
     const ids = textures.map((t) => t.liveId).filter((id): id is string => !!id);
     if (ids.length) realtime.send({ t: "erase", ids });
   }
@@ -2636,8 +2447,38 @@ export class DrawingOverlay {
    * Share a finished stroke exactly as we see it: the baked bitmap (3D wrap + lighting
    * included) and its panorama grid. Called for every finished stroke, signed in or not.
    */
-  private async shareFinishedStroke(tex: MarkerTexture): Promise<void> {
+  private shareFinishedStroke(tex: MarkerTexture): Promise<void> {
+    this._ownChanges = true;
+    const p = this.sendFinishedStroke(tex).catch((e) => console.warn("[realtime] could not share a stroke:", e));
+    this._sharing.add(p);
+    void p.then(() => this._sharing.delete(p));
+    return p;
+  }
+
+  /** strokes being encoded for the room */
+  private _sharing = new Set<Promise<void>>();
+  /** did we draw, undo or erase here since the last takeOwnChanges? */
+  private _ownChanges = false;
+  takeOwnChanges(): boolean {
+    const c = this._ownChanges;
+    this._ownChanges = false;
+    return c;
+  }
+
+  /** Everything painted here as seen from this view (transparent background; ss = supersampling). */
+  renderPreview(view: PreviewView, ss: number): HTMLCanvasElement | null {
+    const draws = this.drawList().flatMap((tex) => {
+      if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
+      return tex._gpuVertexCount && !tex.pendingDelete
+        ? [{ source: texSource(tex), basic: tex._gpuBasicCoords!, uv: tex._gpuTexCoords!, opacity: tex.opacity ?? 1 }]
+        : [];
+    });
+    return this.webglRenderer?.renderPreview(draws, view, ss) ?? null;
+  }
+
+  private async sendFinishedStroke(tex: MarkerTexture): Promise<void> {
     if (!tex.canvas) return;
+    const room = realtime.current;
     tex.liveId ??= crypto.randomUUID();
     const canvas = tex.canvas;
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.9));
@@ -2651,6 +2492,7 @@ export class DrawingOverlay {
     });
     // undone while encoding: don't resurrect it for everyone else
     if (this._redoStack.includes(tex)) return;
+    if (realtime.current !== room) return; // in another place by now
     realtime.send({
       t: "stroke_done",
       stroke: {
@@ -2887,35 +2729,30 @@ export class DrawingOverlay {
   // surface shader as our own live strokes. Their finished bitmap is then the same pixels, so
   // the swap when they let go is invisible.
   private _replays = new Map<string, Replay[]>();
-  private _replayScratch: CanvasRenderingContext2D | null = null;
 
   private replayStart(id: string, m: { color: string; lineWidth: number; toolType: string; u: number; v: number; fov: number; group?: number; seed?: number; wpp?: number }): boolean {
     if (!this.canDrawDecals() || m.color === "rainbow") return false;
     const toolType = (["pencil", "marker", "crayon", "fountainPen", "watercolor"] as const).find((t) => t === m.toolType);
     if (!toolType) return false;
-    const st = this.makeDecalAt([m.u, m.v], 1, m.wpp, true, toolType, m.group ?? 0, m.fov);
+    const st = this.makeDecalAt([m.u, m.v], 1, m.wpp, true, { color: m.color, lineWidth: m.lineWidth, toolType }, m.seed ?? 0, m.group ?? 0, m.fov);
     if (!st) return false;
     this.remotePreviewEnd(id);
-    const geo = st.geo;
-    const tool = this.createTool(
-      toolType, st.x, st.y, m.color,
-      async (b) => geo.reach(b[0], b[1], 5000), async (p) => geo.basicAt(p[0], p[1]),
-      m.lineWidth, m.fov, geo.size, geo.size,
-    );
-    tool.setSeed(m.seed ?? 0);
-    if (tool instanceof Brush) tool.fixedSpace = true;
-    const r: Replay = { st, tool, group: m.group, ended: false, dead: false, chain: Promise.resolve() };
-    r.chain = (async () => {
-      await tool.initialize();
-      if (tool instanceof Brush) await tool.startStroke();
-      else tool.startStroke(`replay_${Date.now()}`);
-    })().catch(() => {});
+    const r: Replay = { st, group: m.group, ended: false, dead: false, mids: [], tex: null };
     const list = this._replays.get(id) ?? [];
+    const before = list[list.length - 1];
+    if (before && before.group === m.group) st.tool.resume(before.st.tool);
+    // pieces of a stroke stay until its finished bitmap arrives; a new stroke means the old one is over
+    for (const o of list) if (o.ended && o.group !== m.group) this.expireReplay(id, o, 6000);
     list.push(r);
     this._replays.set(id, list);
     // a stroke that never finishes (sender vanished) doesn't stay forever
-    r.timer = setTimeout(() => this.dropReplay(id, r), 60000);
+    this.expireReplay(id, r, 60000);
     return true;
+  }
+
+  private expireReplay(id: string, r: Replay, ms: number): void {
+    clearTimeout(r.timer);
+    r.timer = setTimeout(() => this.dropReplay(id, r), ms);
   }
 
   /** The peer's stroke piece still being drawn (null = none, or they draw flat). */
@@ -2925,34 +2762,43 @@ export class DrawingOverlay {
     return r && !r.ended ? r : null;
   }
 
-  /** Feed the drawer's brush samples (u, v, decal x, y) to the tool, in order, then redraw. */
+  /** Feed the drawer's brush samples (u, v, decal x, y) to the same brush, frame by frame. */
   private replaySamples(r: Replay, pts: number[]): void {
-    r.chain = r.chain.then(async () => {
-      if (r.dead) return;
-      this._replayScratch ??= (() => {
-        const c = document.createElement("canvas");
-        c.width = c.height = 1;
-        return c.getContext("2d")!;
-      })();
-      for (let k = 0; k + 3 < pts.length; k += 4) {
-        this.moveDecalTo(r.st, [pts[k], pts[k + 1]], [pts[k + 2], pts[k + 3]]);
-        // every sample goes through the tool (it builds the stroke from them); only the last is drawn
-        if (k + 4 < pts.length) await r.tool.render(this._replayScratch, r.st.x, r.st.y, r.st.fov);
-        if (r.dead) return;
+    if (r.dead) return;
+    const st = r.st, g = st.geo, radius = st.nearRadius * g.s;
+    for (let k = 0; k + 3 < pts.length; k += 4) {
+      const b: [number, number] = [pts[k], pts[k + 1]];
+      const mid = pts[k + 2] >= MID_SAMPLE;
+      const d: [number, number] = [pts[k + 2] - (mid ? MID_SAMPLE : 0), pts[k + 3]];
+      // unwrap and open up the surface along the way
+      const from = st.prev;
+      let du = b[0] - from.basic[0];
+      if (du > 0.5) du -= 1;
+      else if (du < -0.5) du += 1;
+      const dv = b[1] - from.basic[1];
+      const len = Math.hypot(d[0] - from.decal[0], d[1] - from.decal[1]);
+      const n = Math.min(400, Math.max(1, Math.ceil(len / (st.nearRadius * 0.3)), Math.ceil(Math.hypot(du * 2048, dv * 1024) / 12)));
+      for (let i = 1; i <= n; i++) {
+        const u = from.basic[0] + (du * i) / n, v = from.basic[1] + (dv * i) / n;
+        if (g.reach(u, v)) g.markNear(u, v, radius);
       }
-      await this.renderDecalLive(r.tool, r.st);
-      if (!r.dead) this.render();
-    }).catch(() => {});
+      st.prev = { basic: b, decal: d, screen: [0, 0] };
+      r.mids.push(d);
+      if (mid) continue;
+      this.paintFrame(st, r.mids, b);
+      r.mids = [];
+    }
+    this.render();
   }
 
   private replayEnd(id: string, r: Replay): void {
     r.ended = true;
-    r.chain = r.chain.then(() => {
-      if (r.tool instanceof Brush) r.tool.endStroke();
-    });
-    // the finished bitmap normally arrives well within this
-    clearTimeout(r.timer);
-    r.timer = setTimeout(() => this.dropReplay(id, r), 6000);
+    const piece = this.bakePiece(r.st);
+    if (piece) r.tex = this.pieceTexture(piece, r.st);
+    this.releaseDecal(r.st);
+    // the finished bitmap arrives once the whole stroke (all its pieces) is over
+    this.expireReplay(id, r, 60000);
+    this.render();
   }
 
   private dropReplay(id: string, r: Replay): void {
@@ -2965,12 +2811,9 @@ export class DrawingOverlay {
       if (i > -1) list.splice(i, 1);
       if (!list.length) this._replays.delete(id);
     }
-    void r.chain.then(() => {
-      r.tool.dispose();
-      this.webglRenderer?.releaseDeepStroke(r.st.geo);
-      r.st.geo.release();
-      this.render();
-    });
+    if (r.tex) this.webglRenderer?.invalidateTexture(texSource(r.tex));
+    if (!r.ended) this.releaseDecal(r.st);
+    this.render();
   }
 
   private dropReplays(id: string): void {
@@ -3145,29 +2988,32 @@ export class DrawingOverlay {
     const resolvedColor = this._isRainbowStroke ? resolveRainbowColor() : color;
 
     // The sky isn't a surface: don't start a stroke there at all.
-    if (!this._chainDecal && this.isSkyAt(pixelX, pixelY)) {
+    if (this.isSkyAt(pixelX, pixelY)) {
       this._strokeParams = null;
       this._activeDecal = null;
       return;
     }
     this._strokeParams = { color, lineWidth, toolType };
-
-    // Draw on the 3D surface when depth data is available: the tool works in decal space.
-    if (!this._chainDecal) this._strokeGroup++;
-    this._activeDecal = this._isRainbowStroke ? null : this._chainDecal ?? this.makeDecal(pixelX, pixelY);
-    this._chainDecal = null;
-    const dec = this._activeDecal;
-    const toolX = dec ? dec.x : pixelX;
-    const toolY = dec ? dec.y : pixelY;
-    const toolW = dec ? dec.geo.size : this.canvas.width;
-    const toolH = dec ? dec.geo.size : this.canvas.height;
-    const decProjector: Projector | null = dec ? async (b) => dec.geo.reach(b[0], b[1], 5000) : null;
-    const decUnprojector: Unprojector | null = dec ? async (p) => dec.geo.basicAt(p[0], p[1]) : null;
+    this._strokeGroup++;
 
     // Ensure canvas is visible when user starts drawing
     this.canvas.style.opacity = "1";
     if (this.useWebGL && this.webglRenderer) {
       this.webglRenderer.getCanvas().style.opacity = "1";
+    }
+
+    // Draw on the 3D surface when depth data is available.
+    if (!this._isRainbowStroke) {
+      const st = this.makeDecal(pixelX, pixelY);
+      if (st) {
+        this.dropPieces();
+        this._decalPath = [];
+        this._decalPos = [pixelX, pixelY];
+        this._chainTimes = [];
+        this.beginPiece(st);
+        this.startRenderLoop();
+        return;
+      }
     }
 
     const projector = async (basic: [number, number]): Promise<[number, number] | null> => {
@@ -3180,28 +3026,14 @@ export class DrawingOverlay {
       const result = await this.viewer.unprojectToBasic(screen);
       return result ? [result[0], result[1]] : null;
     };
-    const seed = Math.floor(Math.random() * 2 ** 31);
     const tool = this.createTool(
-      toolType, toolX, toolY, resolvedColor, decProjector ?? projector, decUnprojector ?? unprojector,
-      lineWidth, this.currentFov, toolW, toolH,
+      toolType, pixelX, pixelY, resolvedColor, projector, unprojector,
+      lineWidth, this.currentFov, this.canvas.width, this.canvas.height,
     );
-    tool.setSeed(seed);
-    if (dec && tool instanceof Brush) tool.fixedSpace = true;
-
-    // Broadcast the stroke start. On a 3D surface: the decal's origin, scale and brush seed, so
-    // everyone else rebuilds the same decal and replays the same brush (identical pixels).
-    this._pendingSamples = [];
-    if (dec) {
-      this._lastSample = [dec.x, dec.y];
-      realtime.send({
-        t: "stroke_start", color: resolvedColor, lineWidth, toolType, u: dec.start[0], v: dec.start[1],
-        fov: dec.fov, group: this._strokeGroup, seed, wpp: dec.geo.s,
-      });
-    } else {
-      this.viewer.unprojectToBasic([pixelX, pixelY]).then((basic) => {
-        if (basic) this.broadcastStrokeStart(color, lineWidth, toolType, basic[0], basic[1]);
-      });
-    }
+    tool.setSeed(Math.floor(Math.random() * 2 ** 31));
+    this.viewer.unprojectToBasic([pixelX, pixelY]).then((basic) => {
+      if (basic) this.broadcastStrokeStart(color, lineWidth, toolType, basic[0], basic[1]);
+    });
 
     if (tool instanceof Brush) {
       this.brush = tool;
@@ -3224,7 +3056,7 @@ export class DrawingOverlay {
     }
   }
 
-  /** The drawing tool for a stroke (same construction for our strokes and replayed ones). */
+  /** The on-screen drawing tool for a flat stroke (no 3D surface). */
   private createTool(
     toolType: "pencil" | "marker" | "crayon" | "fountainPen" | "watercolor",
     x: number, y: number, color: string, projector: Projector, unprojector: Unprojector,
@@ -3247,7 +3079,10 @@ export class DrawingOverlay {
     if (!force && now - this.lastBroadcastTime < 50 && pts.length < 4 * 120) return;
     this.lastBroadcastTime = now;
     this._pendingSamples = [];
-    realtime.send({ t: "stroke_point", u: pts[pts.length - 4], v: pts[pts.length - 3], pts });
+    for (let i = 0; i < pts.length; i += 4 * 120) {
+      const part = pts.slice(i, i + 4 * 120);
+      realtime.send({ t: "stroke_point", u: part[part.length - 4], v: part[part.length - 3], pts: part });
+    }
   }
 
   addPoint(pixelX: number, pixelY: number): void {
@@ -3257,7 +3092,7 @@ export class DrawingOverlay {
     const dy = pixelY - this.lastPixelY;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance < 2) return;
+    if (distance < (this._activeDecal ? 1 : 2)) return;
 
     this._strokeHasMovement = true;
     this.lastPixelX = pixelX;
@@ -3270,9 +3105,12 @@ export class DrawingOverlay {
       if (this.pen) this.pen.updateColor(newColor);
     }
 
-    // Broadcast point in basic coords (throttled internally). Surface strokes share their
-    // brush samples instead (updateDecalPosition).
-    if (this._activeDecal) return;
+    // Surface strokes walk every point of the path (advanceDecal) and share their brush samples.
+    if (this._activeDecal) {
+      this._decalPath.push([pixelX, pixelY]);
+      return;
+    }
+    // Broadcast point in basic coords (throttled internally).
     this.viewer.unprojectToBasic([pixelX, pixelY]).then((basic) => {
       if (basic) {
         this.broadcastStrokePoint(basic[0], basic[1]);
@@ -3285,20 +3123,19 @@ export class DrawingOverlay {
   }
 
   async endStroke(): Promise<void> {
+    if (this._activeDecal) return this.endDecalStroke();
     if (this.isMarkerActive && this.brush) {
       this.brush.endStroke();
       this.isMarkerActive = false;
 
       if (this._strokeHasMovement) {
         const brushStrokeId = this.brush.getStrokeId();
-        const dec = this._activeDecal;
         this.dyingStrokes.push({
           brush: this.brush,
           brushStrokeId: brushStrokeId || undefined,
-          fov: dec ? dec.fov : this.currentFov,
-          lastX: dec ? dec.x : this.lastPixelX,
-          lastY: dec ? dec.y : this.lastPixelY,
-          decal: dec ?? undefined,
+          fov: this.currentFov,
+          lastX: this.lastPixelX,
+          lastY: this.lastPixelY,
         });
       } else {
         this.brush.dispose();
@@ -3312,13 +3149,11 @@ export class DrawingOverlay {
       this.isPencilActive = false;
 
       if (this._strokeHasMovement) {
-        const dec = this._activeDecal;
         this.dyingPenStrokes.push({
           pen: this.pen,
-          fov: dec ? dec.fov : this.currentFov,
-          lastX: dec ? dec.x : this.lastPixelX,
-          lastY: dec ? dec.y : this.lastPixelY,
-          decal: dec ?? undefined,
+          fov: this.currentFov,
+          lastX: this.lastPixelX,
+          lastY: this.lastPixelY,
         });
       } else {
         this.pen.dispose();
@@ -3327,8 +3162,6 @@ export class DrawingOverlay {
       this.pen = null;
     }
 
-    this._activeDecal = null;
-    this.flushStrokeSamples(true);
     this.broadcastStrokeEnd();
   }
 
@@ -3760,9 +3593,10 @@ export class DrawingOverlay {
   private startRenderLoop(): void {
     if (this.animationFrameId !== null) return;
 
-    const loop = async () => {
+    const frame = async () => {
       // Keep running if we have anything active
       if (
+        !this._activeDecal &&
         !this.isMarkerActive &&
         !this.isPencilActive &&
         this.dyingStrokes.length === 0 &&
@@ -3807,6 +3641,9 @@ export class DrawingOverlay {
         return t < 1;
       });
 
+      // paint this frame's path first, so it's on screen this frame
+      if (this._activeDecal) this.advanceDecal();
+
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
       if (this.useWebGL && this.webglRenderer) {
@@ -3832,9 +3669,7 @@ export class DrawingOverlay {
           const stroke = this.dyingStrokes[i];
           if (stroke.brush) {
             this.activeDrops.push(...stroke.brush.extractDrops());
-            // On a 3D surface the splatters stay inside the brush: it paints them into the decal,
-            // so they lie on the surface, get lit, and are baked into the stroke for good.
-            if (!stroke.decal) this.activeSplashes.push(...stroke.brush.extractSplashes());
+            this.activeSplashes.push(...stroke.brush.extractSplashes());
 
             // Disable simulation for finalization phase
             stroke.brush.dripping = false;
@@ -3869,8 +3704,7 @@ export class DrawingOverlay {
 
         // 2. Render finalizing strokes (fill the gap between dying and texture)
         for (const stroke of this.finalizingStrokes) {
-          if (stroke.decal) await this.renderDecalLive(stroke.brush, stroke.decal);
-          else await this.renderShaded(stroke.brush, stroke.lastX, stroke.lastY, stroke.fov);
+          await this.renderShaded(stroke.brush, stroke.lastX, stroke.lastY, stroke.fov);
         }
 
         // 3. Process active splashes (batch projections)
@@ -3943,17 +3777,9 @@ export class DrawingOverlay {
         // Extract drips/splashes frame-by-frame so they are simulated immediately
         // preventing "stuck" drops during long strokes
         this.activeDrops.push(...this.brush.extractDrops());
-        if (!this._activeDecal) this.activeSplashes.push(...this.brush.extractSplashes());
+        this.activeSplashes.push(...this.brush.extractSplashes());
 
-        if (this._activeDecal) {
-          if (!this.updateDecalPosition(this._activeDecal, this.lastPixelX, this.lastPixelY) && this._strokeHasMovement) {
-            this.chainDecalStroke();
-          } else {
-            await this.renderDecalLive(this.brush, this._activeDecal);
-          }
-        } else {
-          await this.renderShaded(this.brush, this.lastPixelX, this.lastPixelY, this.currentFov);
-        }
+        await this.renderShaded(this.brush, this.lastPixelX, this.lastPixelY, this.currentFov);
       }
 
       // Render highlight outlines AFTER everything (including active brush) so they appear on top
@@ -4029,8 +3855,7 @@ export class DrawingOverlay {
 
       // Render finalizing pen strokes
       for (const stroke of this.finalizingPenStrokes) {
-        if (stroke.decal) await this.renderDecalLive(stroke.pen, stroke.decal);
-        else await this.renderShaded(stroke.pen, stroke.lastX, stroke.lastY, stroke.fov);
+        await this.renderShaded(stroke.pen, stroke.lastX, stroke.lastY, stroke.fov);
       }
 
       // Render active pen
@@ -4038,20 +3863,20 @@ export class DrawingOverlay {
         // Update rainbow color every frame so hue animates continuously
         if (this._isRainbowStroke) this.pen.updateColor(resolveRainbowColor());
 
-        if (this._activeDecal) {
-          if (!this.updateDecalPosition(this._activeDecal, this.lastPixelX, this.lastPixelY) && this._strokeHasMovement) {
-            this.chainDecalStroke();
-          } else {
-            await this.renderDecalLive(this.pen, this._activeDecal);
-          }
-        } else {
-          await this.renderShaded(this.pen, this.lastPixelX, this.lastPixelY, this.currentFov);
-        }
+        await this.renderShaded(this.pen, this.lastPixelX, this.lastPixelY, this.currentFov);
       }
 
       this.animationFrameId = requestAnimationFrame(loop);
     };
-    loop();
+    // Claim the loop before the first frame runs: frames await, and a second loop started meanwhile
+    // would draw the same brush at the same time and garble the stroke.
+    const loop = () => {
+      frame().catch((err) => {
+        console.error("[DrawingOverlay] frame failed:", err);
+        this.animationFrameId = requestAnimationFrame(loop);
+      });
+    };
+    this.animationFrameId = requestAnimationFrame(loop);
   }
 
   private async finalizeStroke(stroke: {
@@ -4059,10 +3884,8 @@ export class DrawingOverlay {
     lastX: number;
     lastY: number;
     fov: number;
-    decal?: DecalState;
   }): Promise<MarkerTexture | null> {
     if (!this.viewer) return null;
-    if (stroke.decal) return this.finalizeDecalStroke(stroke.brush, stroke.decal);
 
     // Render to a full-size temp canvas first (projector outputs screen coords)
     const tempCanvas = document.createElement("canvas");
@@ -4157,10 +3980,8 @@ export class DrawingOverlay {
     lastX: number;
     lastY: number;
     fov: number;
-    decal?: DecalState;
   }): Promise<MarkerTexture | null> {
     if (!this.viewer) return null;
-    if (stroke.decal) return this.finalizeDecalStroke(stroke.pen, stroke.decal);
 
     const isWatercolor = stroke.pen instanceof WatercolorBrush;
 
@@ -4535,8 +4356,9 @@ export class DrawingOverlay {
     const b = this.screenToBasic(pixelX, pixelY);
     if (!b) return why("no projection");
     const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-    const st = this.makeDecalAt(b, radPerPx, worldPerPx, false, this._strokeParams?.toolType ?? "pencil", this._strokeGroup, this.currentFov);
+    const st = this.makeDecalAt(b, radPerPx, worldPerPx, false, this._strokeParams!, Math.floor(Math.random() * 2 ** 31), this._strokeGroup, this.currentFov);
     if (!st) return why("no surface (sky)");
+    st.prev.screen = [pixelX, pixelY];
     if (import.meta.env.DEV && (globalThis as any).__deepDebug) console.info(`[deep] wrap @${pixelX | 0},${pixelY | 0}${worldPerPx ? " (chained)" : ""}`);
     return st;
   }
@@ -4551,33 +4373,39 @@ export class DrawingOverlay {
    */
   private makeDecalAt(
     b: [number, number], radPerPx: number, worldPerPx: number | undefined, exact: boolean,
-    toolType: keyof typeof DEEP_NEAR_RADIUS, group: number, fov: number,
+    params: { color: string; lineWidth: number; toolType: ToolType }, seed: number, group: number, fov: number,
   ): DecalState | null {
     if (!this._deepData) return null;
     const decal = SurfaceDecal.create(this._deepData, b[0], b[1], radPerPx, worldPerPx, exact);
     if (!decal) return null;
     const geo = new GeodesicMap(this._deepData, b[0], b[1], decal.basis);
-    geo.remember(geo.cx, geo.cy, [b[0], b[1]]);
-    geo.expand(80 * geo.s); // a little head start around the start point
-    const near = DEEP_NEAR_RADIUS[toolType] ?? 14;
+    geo.openTo(b[0], b[1]);
+    const near = DEEP_NEAR_RADIUS[params.toolType] ?? 14;
     geo.markNear(b[0], b[1], near * geo.s);
-    const toolCrop = document.createElement("canvas");
-    toolCrop.width = toolCrop.height = 1;
+    const layer = new DecalLayer();
+    const tool = makeDecalTool(params.toolType, layer, params.color, params.lineWidth, seed);
+    const c: [number, number] = [geo.cx, geo.cy];
+    tool.begin(c[0], c[1]);
     return {
       geo,
       surface: this._deepData.surface,
-      toolCrop,
-      toolRect: [0, 0, 1, 1],
-      hasLive: false,
-      toolVersion: 0,
+      layer,
+      tool,
+      seed,
+      params,
+      toolType: params.toolType,
       geom: null,
-      x: geo.cx,
-      y: geo.cy,
       fov,
-      offFrames: 0,
       group,
       nearRadius: near,
-      prev: { basic: [b[0], b[1]], decal: [geo.cx, geo.cy] },
+      prev: { basic: [b[0], b[1]], decal: c, screen: [0, 0] },
+      painted: c,
+      marked: c,
+      track: [],
+      off: [],
+      gap: false,
+      hasPaint: false,
+      cells: new Map(),
       start: [b[0], b[1]],
     };
   }
@@ -4614,151 +4442,258 @@ export class DrawingOverlay {
     return !(d.dist[i * 2048 + j] > 0);
   }
 
-  /**
-   * Move the decal-space tool position to follow the cursor. Returns false when the cursor has left
-   * this decal's surface (corner, curve, other object) — the caller then chains a new decal.
-   */
-  private updateDecalPosition(st: DecalState, screenX: number, screenY: number): boolean {
-    const b = this.screenToBasic(screenX, screenY);
-    if (!b) return true;
-    const moved = this.moveDecalTo(st, b);
-    if (moved && st === this._activeDecal && (st.x !== this._lastSample[0] || st.y !== this._lastSample[1])) {
-      // the brush will render at this new spot: share it so others replay the exact same stroke
-      this._lastSample = [st.x, st.y];
-      this._pendingSamples.push(b[0], b[1], st.x, st.y);
-      this.flushStrokeSamples();
-    }
-    return moved;
+  /** Brush samples (u, v, decal x, y) not yet sent. */
+  private _pendingSamples: number[] = [];
+
+  /** A piece of our stroke starts here: everyone else rebuilds the same decal and brush. */
+  private beginPiece(st: DecalState): void {
+    this._activeDecal = st;
+    this._pendingSamples = [];
+    realtime.send({
+      t: "stroke_start", color: st.params.color, lineWidth: st.params.lineWidth, toolType: st.toolType,
+      u: st.start[0], v: st.start[1], fov: st.fov, group: st.group, seed: st.seed, wpp: st.geo.s,
+    });
   }
 
-  /** Brush samples (u, v, decal x, y) not yet sent, and the last one recorded. */
-  private _pendingSamples: number[] = [];
-  private _lastSample: [number, number] = [NaN, NaN];
+  /**
+   * Walk the stroke along the surface through every pointer position since the last frame, in small
+   * steps, then let the brush paint that bit. Fast moves are followed exactly like slow ones.
+   */
+  private advanceDecal(): void {
+    const path = this._decalPath;
+    if (!path.length) return;
+    this._decalPath = [];
+    // steps of about one depth-map pixel (bigger ones could skip over a depth edge)
+    const pxPerCell = Math.max(1, this.canvas.height) / ((this.currentFov / 180) * 1024);
+    const step = Math.min(5, Math.max(2, pxPerCell));
+    for (const [x, y] of path) {
+      const [fx, fy] = this._decalPos;
+      const n = Math.max(1, Math.ceil(Math.hypot(x - fx, y - fy) / step));
+      for (let k = 1; k <= n; k++) this.stepDecal(fx + ((x - fx) * k) / n, fy + ((y - fy) * k) / n);
+      this._decalPos = [x, y];
+    }
+    if (this._activeDecal) this.paintTrack(this._activeDecal);
+  }
+
+  /** One small step of the stroke's path on screen. */
+  private stepDecal(x: number, y: number): void {
+    const st = this._activeDecal;
+    const b = st && this.screenToBasic(x, y);
+    if (!st || !b) return;
+    if (!st.geo.isSurface(b[0], b[1])) {
+      // over the sky: the pen is up until the path is back on something
+      st.gap = true;
+      st.off = [];
+      return;
+    }
+    // how far the path may be off this surface before the stroke continues on the other one
+    // (thin things like railings are skipped; ragged areas like trees split less eagerly)
+    const now = performance.now();
+    this._chainTimes = this._chainTimes.filter((t) => now - t < 400);
+    const hop = Math.min(48, 6 + 4 * this._chainTimes.length);
+    const d = st.geo.reach(b[0], b[1]);
+    if (d && this.continues(st, b, d)) {
+      if (!st.gap || Math.hypot(x - st.prev.screen[0], y - st.prev.screen[1]) <= hop) {
+        st.gap = false;
+        st.off = [];
+        st.prev = { basic: b, decal: d, screen: [x, y] };
+        st.track.push(st.prev);
+        if (Math.hypot(d[0] - st.marked[0], d[1] - st.marked[1]) > st.nearRadius * 0.4) {
+          st.geo.markNear(b[0], b[1], st.nearRadius * st.geo.s);
+          st.marked = d;
+        }
+        return;
+      }
+      this.chainDecal(x, y, b);
+      return;
+    }
+    st.off.push([x, y]);
+    const [ox, oy] = st.off[0];
+    if (Math.hypot(x - ox, y - oy) >= hop) this.leaveSurface();
+  }
+
+  /** Is decal point d at b a step along the same surface from the last point, not a jump? */
+  private continues(st: DecalState, b: [number, number], d: [number, number]): boolean {
+    const moved = Math.hypot(d[0] - st.prev.decal[0], d[1] - st.prev.decal[1]);
+    if (this.folds(st, b, d)) return false;
+    if (moved < 6) return true;
+    const s = st.geo.step(st.prev.basic, b);
+    // the sheet can't be much longer than the straight line between two close points, unless they
+    // are only connected the long way round (an object's edge, or a loop that doesn't close)
+    return moved < s.px * 1.6 + 4;
+  }
 
   /**
-   * Move a decal's tool position to panorama point b (the cursor). known = the decal position the
-   * drawer computed (replaying someone else's stroke), so the brush sees exactly their samples.
+   * On a long stroke over bumpy surfaces the unfolded sheet can overlap itself: two places far apart
+   * get the same decal coordinates, and paint for one would show up in the other as a smear.
    */
-  private moveDecalTo(st: DecalState, b: [number, number], known?: [number, number]): boolean {
-    if (!st.geo.isSurface(b[0], b[1]) && !known) return true; // over the sky: pause, never chain into it
-    const reached = st.geo.reach(b[0], b[1], 30000);
-    const d = known ?? reached;
-    if (!d) {
-      // not reachable along the surface (crossed onto a separate object)
-      return ++st.offFrames < 3;
+  private folds(st: DecalState, b: [number, number], d: [number, number]): boolean {
+    const cell = st.nearRadius * 2, cx = Math.floor(d[0] / cell), cy = Math.floor(d[1] / cell);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const at = st.cells.get((cy + j) * 4096 + cx + i);
+      if (at && st.geo.step(at, b).px > cell * 4) return true;
     }
-    st.offFrames = 0;
-    st.x = d[0];
-    st.y = d[1];
-    st.geo.remember(d[0], d[1], b);
-    // grow a margin around the cursor so the brush footprint is always covered, and mark the
-    // surface around the drawn path as paintable
-    st.geo.expand(st.geo.geoAt(b[0], b[1]) + 80 * st.geo.s, 20000);
-    // Mark the paintable area along the whole segment since the last sample, not just at the
-    // sample — fast moves put samples further apart than the brush, which left gaps.
-    const radius = st.nearRadius * st.geo.s;
-    const prev = st.prev;
-    if (prev) {
-      const len = Math.hypot(d[0] - prev.decal[0], d[1] - prev.decal[1]);
-      const steps = Math.min(64, Math.ceil(len / (st.nearRadius * 0.5)));
-      let du = b[0] - prev.basic[0];
-      if (du > 0.5) du -= 1;
-      else if (du < -0.5) du += 1;
-      const dv = b[1] - prev.basic[1];
-      for (let k = 1; k < steps; k++) {
-        const t = k / steps;
-        const u = prev.basic[0] + du * t, v = prev.basic[1] + dv * t;
-        if (st.geo.reach(u, v, 5000)) st.geo.markNear(u, v, radius);
-      }
-    }
-    st.geo.markNear(b[0], b[1], radius);
-    st.prev = { basic: [b[0], b[1]], decal: [d[0], d[1]] };
+    st.cells.set(cy * 4096 + cx, b);
+    return false;
+  }
+
+  /** The path is off this piece's surface for good: continue the stroke from where it left. */
+  private leaveSurface(): void {
+    const st = this._activeDecal;
+    if (!st || !st.off.length) return;
+    const off = st.off;
+    st.off = [];
+    const b = this.screenToBasic(off[0][0], off[0][1]);
+    if (!b) return;
+    // still the same surface (the unwrap just ended here): join on at the last painted point
+    const near = st.geo.step(st.prev.basic, b);
+    const moved = st.hasPaint || st.track.length > 0; // a piece that got nowhere isn't joined onto again
+    const joined = moved && !st.gap && near.depth < 1.15 && Math.hypot(off[0][0] - st.prev.screen[0], off[0][1] - st.prev.screen[1]) < 8;
+    const ok = joined
+      ? this.chainDecal(st.prev.screen[0], st.prev.screen[1], st.prev.basic, st.geo.worldPerPxAt(st.prev.basic[0], st.prev.basic[1]) ?? undefined)
+      : this.chainDecal(off[0][0], off[0][1], b);
+    if (!ok) { st.gap = true; return; }
+    for (const [x, y] of joined ? off : off.slice(1)) this.stepDecal(x, y);
+  }
+
+  /** Finish the current piece and continue the same stroke on a new one starting at this point. */
+  private chainDecal(x: number, y: number, b: [number, number], worldPerPx?: number): boolean {
+    const st = this._activeDecal;
+    const params = this._strokeParams;
+    if (!st || !params) return false;
+    const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
+    const next = this.makeDecalAt(b, radPerPx, worldPerPx, false, params, Math.floor(Math.random() * 2 ** 31), this._strokeGroup, this.currentFov);
+    if (!next) { st.gap = true; return false; }
+    next.prev.screen = [x, y];
+    this.endPiece(st);
+    next.tool.resume(st.tool);
+    this._chainTimes.push(performance.now());
+    this.beginPiece(next);
     return true;
   }
 
-  /**
-   * The cursor moved onto a different surface: finish the current segment and continue the same
-   * stroke (tool, colour, width) on a new decal fitted to the surface under the cursor.
-   */
-  private chainDecalStroke(): void {
-    const params = this._strokeParams;
-    if (!params) return;
-    const x = this.lastPixelX, y = this.lastPixelY;
-    // The surface unwrap already bends around corners/curves; we only get here when the cursor
-    // moved onto a separate object (across a depth jump). Continue the stroke there at the same
-    // on-screen brush size (what the cursor shows); if that fails, keep drawing on the current surface.
-    const next = this.makeDecal(x, y);
-    if (!next) return;
-    void this.endStroke();
-    this._chainDecal = next;
-    this.startStroke(x, y, params.color, params.lineWidth, params.toolType);
+  /** Hand the path walked so far to the brush (and to everyone watching). */
+  private paintTrack(st: DecalState): void {
+    const track = st.track;
+    if (!track.length) return;
+    let dist = 0, p = st.painted;
+    for (const t of track) { dist += Math.hypot(t.decal[0] - p[0], t.decal[1] - p[1]); p = t.decal; }
+    if (dist < 1) return; // too little yet: paint it with the next frame
+    st.track = [];
+    const round = (v: number) => Math.round(v * 100) / 100;
+    const pts = track.map((t) => [round(t.decal[0]), round(t.decal[1])] as [number, number]);
+    const keep = simplify(st.painted, pts, 0.6);
+    const kept = keep.map((i) => pts[i]);
+    keep.forEach((i, k) => {
+      const mid = k < keep.length - 1;
+      this._pendingSamples.push(+track[i].basic[0].toFixed(6), +track[i].basic[1].toFixed(6), pts[i][0] + (mid ? MID_SAMPLE : 0), pts[i][1]);
+    });
+    this.flushStrokeSamples();
+    this.paintFrame(st, kept, track[track.length - 1].basic);
   }
 
-  /** Crop rectangle (decal px) around a tool's current bounds. */
-  private decalCrop(tool: { getBounds(): { minX: number; minY: number; maxX: number; maxY: number } }, size: number) {
-    const pad = tool instanceof WatercolorBrush ? 150 : 50;
-    const b = tool.getBounds();
-    const x0 = Math.max(0, Math.floor(b.minX - pad)), y0 = Math.max(0, Math.floor(b.minY - pad));
-    const x1 = Math.min(size, Math.ceil(b.maxX + pad)), y1 = Math.min(size, Math.ceil(b.maxY + pad));
-    return { x0, y0, w: x1 - x0, h: y1 - y0 };
-  }
-
-  /** Splatters land away from the path: grow the unwrap out to them and let paint show there. */
-  private openSplashes(tool: unknown, st: DecalState): void {
-    if (!(tool instanceof Brush)) return;
+  /** Let a piece's brush paint one frame's points; at = the last one in the panorama. */
+  private paintFrame(st: DecalState, pts: [number, number][], at: [number, number]): void {
     const g = st.geo;
-    for (const sp of tool.takeNewSplashes()) {
-      if (sp.x === undefined || sp.y === undefined) continue;
-      g.expand((Math.hypot(sp.x - g.cx, sp.y - g.cy) * 1.3 + 24) * g.s, 20000);
+    st.tool.frame(pts);
+    st.painted = pts[pts.length - 1];
+    st.hasPaint = true;
+    g.markNear(at[0], at[1], st.nearRadius * g.s);
+    // splatters land away from the path: unwrap out to them and let paint show there
+    const spots = st.tool.spots;
+    if (!spots.length) return;
+    st.tool.spots = [];
+    const far = Math.max(...spots.map((sp) => Math.hypot(sp.x - st.painted[0], sp.y - st.painted[1]) + sp.radius));
+    const radPerPx = ((st.fov * Math.PI) / 180) / Math.max(1, this.canvas.height);
+    const reach = Math.ceil((far * radPerPx * 1024) / Math.PI) + 4;
+    if (reach > 38) g.openTo(at[0], at[1], Math.min(80, reach), true);
+    for (const sp of spots) {
       const b = g.basicAt(sp.x, sp.y);
       if (b) g.markNear(b[0], b[1], (sp.radius + 2) * g.s);
     }
   }
 
-  /** Render a live decal stroke: tool -> decal canvas -> crop uploaded to the GPU (drawn by the shader). */
-  private async renderDecalLive(
-    tool: { render(ctx: CanvasRenderingContext2D, x: number, y: number, fov: number): unknown; getBounds(): { minX: number; minY: number; maxX: number; maxY: number } },
-    st: DecalState,
-  ): Promise<void> {
-    if (!this.webglRenderer) return;
-    const size = st.geo.size;
-    this.openSplashes(tool, st);
-    // Draw the tool straight into a small canvas covering just the stroke (+ room to grow), via a
-    // translate — instead of clearing and cropping a full 2048x2048 canvas every frame.
-    const crop = this.decalCrop(tool, size);
-    if (crop.w <= 0 || crop.h <= 0 || !isFinite(crop.w) || !isFinite(crop.h)) return;
-    const GROW = 96;
-    const x0 = Math.max(0, crop.x0 - GROW), y0 = Math.max(0, crop.y0 - GROW);
-    const w = Math.min(size, crop.x0 + crop.w + GROW) - x0, h = Math.min(size, crop.y0 + crop.h + GROW) - y0;
-    // only reallocate when it must grow (resizing a canvas is expensive)
-    const cw = Math.ceil(w / 128) * 128, ch = Math.ceil(h / 128) * 128;
-    if (st.toolCrop.width < w || st.toolCrop.height < h || st.toolCrop.width > cw * 2 || st.toolCrop.height > ch * 2) {
-      st.toolCrop.width = cw;
-      st.toolCrop.height = ch;
-    }
-    const cctx = st.toolCrop.getContext("2d")!;
-    cctx.setTransform(1, 0, 0, 1, 0, 0);
-    cctx.clearRect(0, 0, st.toolCrop.width, st.toolCrop.height);
-    cctx.setTransform(1, 0, 0, 1, -x0, -y0);
-    await tool.render(cctx, st.x, st.y, st.fov);
-    cctx.setTransform(1, 0, 0, 1, 0, 0);
-    st.toolRect = [x0, y0, st.toolCrop.width, st.toolCrop.height];
-    st.toolVersion++;
-    st.hasLive = true;
+  /** Bake what the brush painted into a panorama bitmap (null = nothing to see). */
+  private bakePiece(st: DecalState): BakedPiece | null {
+    const l = st.layer;
+    if (!st.hasPaint || !l.w || !l.h) return null;
+    return st.geo.bake(l.ctx.getImageData(0, 0, l.w, l.h), { x0: l.x0, y0: l.y0, w: l.w, h: l.h }, st.surface);
   }
 
-  /** Live (in-progress / finishing) 3D strokes to draw this frame. */
+  private pieceTexture(piece: BakedPiece, st: DecalState): MarkerTexture {
+    const grid = pieceGrid(piece);
+    return {
+      canvas: piece.canvas,
+      toolType: st.toolType === "marker" ? undefined : st.toolType,
+      gridBasic: grid.gridBasic, gridRows: grid.rows, gridCols: grid.cols,
+      srcWidth: piece.canvas.width, srcHeight: piece.canvas.height,
+      referenceFov: st.fov, strokeGroup: st.group, opacity: 1,
+    };
+  }
+
+  private releaseDecal(st: DecalState): void {
+    this.webglRenderer?.releaseDeepStroke(st.geo);
+    st.geo.release();
+  }
+
+  /** End a piece: bake it now (it's small), free its surface map, keep the picture on screen. */
+  private endPiece(st: DecalState): void {
+    this.paintTrack(st);
+    this.flushStrokeSamples(true);
+    this.broadcastStrokeEnd();
+    const piece = this.bakePiece(st);
+    if (piece) this._pieces.push({ piece, tex: this.pieceTexture(piece, st) });
+    this.releaseDecal(st);
+    if (this._activeDecal === st) this._activeDecal = null;
+  }
+
+  private dropPieces(): void {
+    for (const { tex } of this._pieces) this.webglRenderer?.invalidateTexture(texSource(tex));
+    this._pieces = [];
+  }
+
+  /** The stroke is over: its pieces become one bitmap, on screen, undoable and shared right away. */
+  private endDecalStroke(): void {
+    this.advanceDecal();
+    const st0 = this._activeDecal;
+    if (st0 && st0.off.length > 1 && this._strokeHasMovement) this.leaveSurface();
+    const st = this._activeDecal;
+    if (!st) return;
+    this.endPiece(st);
+    const pieces = this._pieces;
+    this._pieces = [];
+    if (!pieces.length) { this.render(); return; }
+    let tex = pieces[0].tex;
+    if (pieces.length > 1) {
+      tex = this.pieceTexture(mergePieces(pieces.map((p) => p.piece)), st);
+      for (const p of pieces) this.webglRenderer?.invalidateTexture(texSource(p.tex));
+    }
+    tex.isLocal = true;
+    tex.inkCost = this._pendingInkCost;
+    this.markerTextures.push(tex);
+    this._undoStack.push(tex);
+    this._redoStack = [];
+    this.onHistoryChange?.();
+    const toolType = st.toolType;
+    if (this._guestMode) this._unsavedGuestTextures.push({ texture: tex, toolType });
+    else void this.saveStrokeTexture(tex, toolType);
+    void this.shareFinishedStroke(tex);
+    this.render();
+  }
+
+  /** Everything baked that's on screen: finished strokes, then pieces of strokes in progress. */
+  private drawList(): MarkerTexture[] {
+    const extra: MarkerTexture[] = [];
+    for (const list of this._replays.values()) for (const r of list) if (r.tex) extra.push(r.tex);
+    for (const p of this._pieces) extra.push(p.tex);
+    return extra.length ? [...this.markerTextures, ...extra] : this.markerTextures;
+  }
+
+  /** Live (in-progress) 3D strokes to draw this frame. */
   private liveDecals(): DecalState[] {
     const out: DecalState[] = [];
-    const add = (st?: DecalState | null) => {
-      if (st && st.hasLive) out.push(st);
-    };
-    add(this._activeDecal);
-    for (const list of this._replays.values()) for (const r of list) if (!r.dead) add(r.st);
-    for (const s of this.finalizingStrokes) add(s.decal);
-    for (const s of this.finalizingPenStrokes) add(s.decal);
-    for (const s of this.dyingStrokes) add(s.decal);
-    for (const s of this.dyingPenStrokes) add(s.decal);
+    for (const list of this._replays.values()) for (const r of list) if (!r.ended && !r.dead && r.st.hasPaint) out.push(r.st);
+    if (this._activeDecal?.hasPaint) out.push(this._activeDecal);
     return out;
   }
 
@@ -4767,7 +4702,7 @@ export class DrawingOverlay {
     const r = this.webglRenderer;
     if (!r) return;
     for (const st of live) {
-      const g = st.geo, bb = g.bbox;
+      const g = st.geo, bb = g.paintBox;
       if (!isFinite(bb.r0)) continue;
       // geometry covering the reached area (rebuilt only when it grows)
       const key = `${bb.r0},${bb.c0},${bb.r1},${bb.c1}`;
@@ -4798,72 +4733,14 @@ export class DrawingOverlay {
         dirty: g.dirty,
         basicCoords: st.geom.basic,
         texCoords: st.geom.tex,
-        tool: st.toolCrop,
-        toolVersion: st.toolVersion,
-        toolRect: st.toolRect,
+        layer: st.layer,
         surface: st.surface,
         panoW: 2048,
         panoH: 1024,
       });
       g.dirty = null;
+      st.layer.dirty = null;
     }
-  }
-
-  /** Finish a 3D stroke: bake the decal-space drawing into an equirect bitmap + panorama grid. */
-  private async finalizeDecalStroke(
-    tool: Brush | Pen | ChalkBrush | FountainPenBrush | WatercolorBrush,
-    st: DecalState,
-  ): Promise<MarkerTexture | null> {
-    const size = st.geo.size;
-    const tmp = document.createElement("canvas");
-    tmp.width = tmp.height = size;
-    const tctx = tmp.getContext("2d", { willReadFrequently: true })!;
-    await tool.render(tctx, st.x, st.y, st.fov);
-    this.openSplashes(tool, st);
-    const rect = this.decalCrop(tool, size);
-    const release = () => {
-      this.webglRenderer?.releaseDeepStroke(st.geo);
-      st.geo.release();
-    };
-    if (rect.w <= 0 || rect.h <= 0) {
-      tool.dispose();
-      release();
-      return null;
-    }
-    const baked = st.geo.bake(tctx.getImageData(rect.x0, rect.y0, rect.w, rect.h), rect, st.surface);
-    let silhouette: HTMLCanvasElement | undefined;
-    if (baked && !(tool instanceof Brush)) {
-      const sc = document.createElement("canvas");
-      sc.width = sc.height = size;
-      const sctx = sc.getContext("2d", { willReadFrequently: true })!;
-      await tool.renderSmooth(sctx, st.x, st.y, st.fov);
-      silhouette = st.geo.bake(sctx.getImageData(rect.x0, rect.y0, rect.w, rect.h), rect, null, 1)?.canvas;
-    }
-    tool.dispose();
-    if (!baked) {
-      release();
-      return null;
-    }
-    const toolType =
-      tool instanceof Brush ? undefined
-      : tool instanceof WatercolorBrush ? ("watercolor" as const)
-      : tool instanceof ChalkBrush ? ("crayon" as const)
-      : tool instanceof FountainPenBrush ? ("fountainPen" as const)
-      : ("pencil" as const);
-    // keep the live GPU stroke visible until the baked texture takes over next frame
-    setTimeout(release, 500);
-    return {
-      canvas: baked.canvas,
-      silhouetteCanvas: silhouette,
-      toolType,
-      gridBasic: baked.gridBasic,
-      gridRows: baked.rows,
-      gridCols: baked.cols,
-      srcWidth: baked.canvas.width,
-      srcHeight: baked.canvas.height,
-      referenceFov: st.fov,
-      strokeGroup: st.group,
-    };
   }
 
   private _liveCanvas: HTMLCanvasElement | null = null;
@@ -5499,7 +5376,8 @@ export class DrawingOverlay {
 
   private async renderMarkerTextures(): Promise<void> {
     const live = this.liveDecals();
-    if (!this.viewer || (this.markerTextures.length === 0 && live.length === 0)) return;
+    const list = this.drawList();
+    if (!this.viewer || (list.length === 0 && live.length === 0)) return;
 
     // ── GPU projection fast path ─────────────────────────────────────────
     // No per-texture JS projection — GPU transforms basic→screen in vertex shader
@@ -5527,7 +5405,7 @@ export class DrawingOverlay {
 
         // Second pass: render all textures normally
         const hueShift = getRainbowHueShift();
-        for (const tex of this.markerTextures) {
+        for (const tex of list) {
           if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
           if (!tex._gpuVertexCount) continue;
 

@@ -1,3 +1,5 @@
+import type { DecalLayer } from './deep/decalTools';
+import type { PreviewView } from './pool/localPreview';
 export interface LineSegment {
     x0: number;
     y0: number;
@@ -386,6 +388,33 @@ void main() {
 }
 `;
 
+// Panorama -> plain camera, the same view as shared/panoramaProjection.mjs. Upside down, because
+// readPixels returns the bottom row first.
+const PREVIEW_VERTEX_SHADER = `#version 300 es
+precision highp float;
+in vec2 a_basic;
+in vec2 a_texCoord;
+out vec2 v_texCoord;
+uniform vec4 u_look;  // sin lon, cos lon, sin lat, cos lat of the view centre
+uniform vec2 u_scale;
+void main() {
+    float lon = (a_basic.x - 0.5) * 6.283185307179586, lat = (0.5 - a_basic.y) * 3.141592653589793;
+    vec3 d = vec3(cos(lat) * sin(lon), sin(lat), cos(lat) * cos(lon));
+    float sl = u_look.x, cl = u_look.y, sp = u_look.z, cp = u_look.w;
+    float x = dot(d, vec3(cl, 0.0, -sl)), y = dot(d, vec3(-sp * sl, cp, -sp * cl)), w = dot(d, vec3(cp * sl, sp, cp * cl));
+    v_texCoord = a_texCoord;
+    gl_Position = vec4(x * u_scale.x, -y * u_scale.y, 0.0, w);
+}
+`;
+const PREVIEW_FRAGMENT_SHADER = `#version 300 es
+precision highp float;
+in vec2 v_texCoord;
+out vec4 fragColor;
+uniform sampler2D u_texture;
+uniform float u_opacity;
+void main() { fragColor = texture(u_texture, v_texCoord) * u_opacity; }
+`;
+
 export interface DeepStrokeDraw {
     /** stable key for this stroke's unwrap texture (re-uploaded only where dirty) */
     key: object;
@@ -396,9 +425,7 @@ export interface DeepStrokeDraw {
     dirty: { r0: number; c0: number; r1: number; c1: number } | null;
     basicCoords: Float32Array;   // triangles covering the reached area
     texCoords: Float32Array;     // region-local [0,1]
-    tool: TexImageSource;        // decal-space crop of the tool's drawing
-    toolVersion: number;         // bump when the tool drawing changed (re-upload only then)
-    toolRect: [number, number, number, number];
+    layer: DecalLayer;           // the tool's drawing (decal space); only its dirty part is uploaded
     surface: Float32Array;       // full panorama paint multiplier, interleaved RGB
     panoW: number;
     panoH: number;
@@ -498,7 +525,7 @@ export class WebGLDrawingRenderer {
     private deepLocs: Record<string, WebGLUniformLocation | null> = {};
     private demTextures = new WeakMap<object, WebGLTexture>();
     private surfaceTextures = new WeakMap<Float32Array, WebGLTexture>();
-    private toolTextures = new WeakMap<object, { tex: WebGLTexture; w: number; h: number; version: number }>();
+    private toolTextures = new Map<object, { tex: WebGLTexture; gen: number }>();
     private lastProjection: GPUProjectionUniforms | null = null;
 
     private textureCache: Map<TexImageSource, WebGLTexture> = new Map();
@@ -1009,14 +1036,9 @@ export class WebGLDrawingRenderer {
         const texture = this.getOrCreateTexture(source);
         if (!texture) return;
 
+        const geo = this.geometryFor(source, basicCoords, texCoords);
         gl.useProgram(this.gpuProjectedProgram);
-        gl.bindVertexArray(this.gpuProjectedVAO);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.gpuBasicBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, basicCoords, gl.DYNAMIC_DRAW);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.gpuTexCoordBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, texCoords, gl.DYNAMIC_DRAW);
+        gl.bindVertexArray(geo.vao);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -1032,6 +1054,94 @@ export class WebGLDrawingRenderer {
         gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 
         gl.bindVertexArray(null);
+    }
+
+    private geometryFor(source: TexImageSource, basicCoords: Float32Array, texCoords: Float32Array) {
+        const gl = this.gl;
+        // geometry never changes for a texture: upload it once, then only bind it
+        let geo = this.geometryCache.get(source);
+        if (!geo || geo.coords !== basicCoords) {
+            if (geo) this.deleteGeometry(geo);
+            const vao = gl.createVertexArray()!, basic = gl.createBuffer()!, uv = gl.createBuffer()!;
+            gl.bindVertexArray(vao);
+            for (const [buf, name, data] of [[basic, 'a_basic', basicCoords], [uv, 'a_texCoord', texCoords]] as const) {
+                const loc = gl.getAttribLocation(this.gpuProjectedProgram!, name);
+                gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+                gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+                gl.enableVertexAttribArray(loc);
+                gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+            }
+            geo = { coords: basicCoords, vao, basic, uv };
+            this.geometryCache.set(source, geo);
+        }
+        return geo;
+    }
+
+    private previewProgram: WebGLProgram | null = null;
+    /** Draw these textures as seen by a plain camera into a canvas (their own textures are reused). */
+    renderPreview(draws: { source: TexImageSource; basic: Float32Array; uv: Float32Array; opacity: number }[], view: PreviewView, ss: number): HTMLCanvasElement | null {
+        const gl = this.gl;
+        if (this._contextLost || !this.gpuProjectedProgram) return null;
+        const w = view.width * ss, h = view.height * ss;
+        const out = document.createElement('canvas');
+        out.width = w;
+        out.height = h;
+        if (!draws.length) return out;
+        if (!this.previewProgram) {
+            const vs = createShader(gl, gl.VERTEX_SHADER, PREVIEW_VERTEX_SHADER), fs = createShader(gl, gl.FRAGMENT_SHADER, PREVIEW_FRAGMENT_SHADER);
+            const prog = gl.createProgram();
+            if (!vs || !fs || !prog) return null;
+            gl.attachShader(prog, vs);
+            gl.attachShader(prog, fs);
+            // same attribute slots as the projected program: both use the same vertex arrays
+            for (const name of ['a_basic', 'a_texCoord']) gl.bindAttribLocation(prog, gl.getAttribLocation(this.gpuProjectedProgram, name), name);
+            gl.linkProgram(prog);
+            if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+            this.previewProgram = prog;
+        }
+        const prog = this.previewProgram;
+        const target = gl.createTexture()!, fbo = gl.createFramebuffer()!;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, target);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target, 0);
+        const viewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+        gl.viewport(0, 0, w, h);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        const lon = (view.u - 0.5) * Math.PI * 2, lat = (0.5 - view.v) * Math.PI, scale = Math.tan((view.horizontalFov * Math.PI) / 360);
+        for (const d of draws) {
+            const tex = this.getOrCreateTexture(d.source);
+            if (!tex) continue;
+            const geo = this.geometryFor(d.source, d.basic, d.uv);
+            gl.useProgram(prog);
+            gl.uniform4f(gl.getUniformLocation(prog, 'u_look'), Math.sin(lon), Math.cos(lon), Math.sin(lat), Math.cos(lat));
+            gl.uniform2f(gl.getUniformLocation(prog, 'u_scale'), 1 / scale, w / h / scale);
+            gl.uniform1f(gl.getUniformLocation(prog, 'u_opacity'), d.opacity);
+            gl.uniform1i(gl.getUniformLocation(prog, 'u_texture'), 0);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.bindVertexArray(geo.vao);
+            gl.drawArrays(gl.TRIANGLES, 0, d.basic.length / 2);
+        }
+        gl.bindVertexArray(null);
+        const px = new Uint8ClampedArray(w * h * 4);
+        gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.deleteFramebuffer(fbo);
+        gl.deleteTexture(target);
+        gl.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+        // premultiplied -> straight
+        for (let i = 3; i < px.length; i += 4) {
+            const a = px[i];
+            if (a === 0 || a === 255) continue;
+            px[i - 3] = (px[i - 3] * 255) / a; px[i - 2] = (px[i - 2] * 255) / a; px[i - 1] = (px[i - 1] * 255) / a;
+        }
+        out.getContext('2d')!.putImageData(new ImageData(px, w, h), 0, 0);
+        return out;
     }
 
     hasDeepStrokes(): boolean {
@@ -1056,10 +1166,12 @@ export class WebGLDrawingRenderer {
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
             gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, d.regionW, d.regionH, 0, gl.RGBA, gl.FLOAT, d.dem);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, d.regionW, d.regionH, 0, gl.RGBA, gl.FLOAT, null);
             this.demTextures.set(d.key, dem);
         } else {
             gl.bindTexture(gl.TEXTURE_2D, dem);
+        }
+        {
             if (d.dirty) {
                 const { r0, c0, r1, c1 } = d.dirty;
                 gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
@@ -1087,10 +1199,10 @@ export class WebGLDrawingRenderer {
             gl.bindTexture(gl.TEXTURE_2D, surf);
         }
 
-        // tool drawing: one texture per stroke, updated in place only when it changed
+        // tool drawing: one texture per stroke; only the part painted since the last frame is uploaded
         gl.activeTexture(gl.TEXTURE0);
         let tt = this.toolTextures.get(d.key);
-        const src = d.tool as HTMLCanvasElement;
+        const layer = d.layer;
         if (!tt) {
             const tex = gl.createTexture()!;
             gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -1098,22 +1210,20 @@ export class WebGLDrawingRenderer {
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
             gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            tt = { tex, w: 0, h: 0, version: -1 };
+            tt = { tex, gen: -1 };
             this.toolTextures.set(d.key, tt);
         }
         gl.bindTexture(gl.TEXTURE_2D, tt.tex);
-        if (tt.version !== d.toolVersion) {
-            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-            if (tt.w === src.width && tt.h === src.height) {
-                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, src);
-            } else {
-                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-                tt.w = src.width;
-                tt.h = src.height;
-            }
-            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-            tt.version = d.toolVersion;
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        if (tt.gen !== layer.gen) {
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, layer.canvas);
+            tt.gen = layer.gen;
+        } else if (layer.dirty) {
+            const { x0, y0, x1, y1 } = layer.dirty;
+            const px = layer.ctx.getImageData(x0 - layer.x0, y0 - layer.y0, x1 - x0, y1 - y0);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, x0 - layer.x0, y0 - layer.y0, gl.RGBA, gl.UNSIGNED_BYTE, px);
         }
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 
         gl.useProgram(prog);
         gl.uniformMatrix4fv(L.u_cameraToWorld, false, u.cameraToWorld);
@@ -1129,7 +1239,7 @@ export class WebGLDrawingRenderer {
         gl.uniform1i(L.u_tool, 0);
         gl.uniform1i(L.u_dem, 1);
         gl.uniform1i(L.u_surface, 2);
-        gl.uniform4f(L.u_toolRect, d.toolRect[0], d.toolRect[1], d.toolRect[2], d.toolRect[3]);
+        gl.uniform4f(L.u_toolRect, layer.x0, layer.y0, layer.w, layer.h);
         gl.uniform2f(L.u_regionSize, d.regionW, d.regionH);
         gl.uniform2f(L.u_regionOrigin, d.regionOrigin[0], d.regionOrigin[1]);
         gl.uniform2f(L.u_panoSize, d.panoW, d.panoH);
@@ -1160,7 +1270,19 @@ export class WebGLDrawingRenderer {
         }
     }
 
+    private geometryCache = new Map<TexImageSource, { coords: Float32Array; vao: WebGLVertexArrayObject; basic: WebGLBuffer; uv: WebGLBuffer }>();
+    private deleteGeometry(g: { vao: WebGLVertexArrayObject; basic: WebGLBuffer; uv: WebGLBuffer }): void {
+        this.gl.deleteVertexArray(g.vao);
+        this.gl.deleteBuffer(g.basic);
+        this.gl.deleteBuffer(g.uv);
+    }
+
     invalidateTexture(source: TexImageSource): void {
+        const g = this.geometryCache.get(source);
+        if (g) {
+            this.deleteGeometry(g);
+            this.geometryCache.delete(source);
+        }
         const texture = this.textureCache.get(source);
         if (texture) {
             this.gl.deleteTexture(texture);
@@ -1173,6 +1295,8 @@ export class WebGLDrawingRenderer {
             this.gl.deleteTexture(texture);
         }
         this.textureCache.clear();
+        for (const g of this.geometryCache.values()) this.deleteGeometry(g);
+        this.geometryCache.clear();
     }
 
     getCanvas(): HTMLCanvasElement {

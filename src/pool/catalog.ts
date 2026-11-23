@@ -6,7 +6,7 @@ export type Panorama = {
   country: string | null; latitude: number | null; longitude: number | null;
   author: string; provider: string; license: string; licenseUrl: string; sourceUrl: string;
   imageUrl: string; previewUrl: string; thumbnailUrl?: string; downloadUrl: string;
-  thumbnailView?: { u: number; v: number };
+  thumbnailView?: { u: number; v: number; horizontalFov?: number };
   originalWidth: number; originalHeight: number; width: number; height: number;
   capturedAt: number | null;
 };

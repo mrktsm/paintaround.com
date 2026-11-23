@@ -19,6 +19,7 @@ import { DEFAULT_PANORAMA, PANORAMA_BY_ID, hasCoordinates, type Panorama } from 
 import { PanoramaDataProvider } from './pool/PanoramaDataProvider';
 import { panoramaLoadingPreviewUrl } from './pool/panoramaImages';
 import { recordVisit } from './pool/visited';
+import { showOwnDrawing } from './pool/localPreview';
 import { DARK_UI } from './theme';
 
 /** PencilKit tool body for the current appearance (tips/bands are shared). */
@@ -406,6 +407,8 @@ function App({ panorama }: { panorama: Panorama }) {
 
     // Fade out drawing strokes before leaving
     if (drawingOverlayRef.current) {
+      if (isDrawingRef.current) void drawingOverlayRef.current.endStroke();
+      showOwnDrawing(panorama, drawingOverlayRef.current);
       drawingOverlayRef.current.leaveRealtime();
       drawingOverlayRef.current.fadeOut();
     }
@@ -586,6 +589,7 @@ function App({ panorama }: { panorama: Panorama }) {
       if (revealFrame !== undefined) cancelAnimationFrame(revealFrame);
       setIsLoaded(false);
       if (drawingOverlayRef.current) {
+        showOwnDrawing(panorama, drawingOverlayRef.current); // left some other way (browser back)
         drawingOverlayRef.current.dispose();
         drawingOverlayRef.current = null;
       }
@@ -1180,7 +1184,13 @@ function App({ panorama }: { panorama: Panorama }) {
     if (isDrawing) {
       const isAdmin = IS_ADMIN;
       if (inkLevelRef.current > 0 || isAdmin) {
-        drawingOverlayRef.current.addPoint(pos.x, pos.y);
+        // every sample since the last event (pens and fast fingers report more than one per frame),
+        // so quick curves stay curves
+        const overlay = drawingOverlayRef.current;
+        const rect = containerRef.current?.getBoundingClientRect();
+        const samples = rect ? e.nativeEvent.getCoalescedEvents?.() ?? [] : [];
+        for (const s of samples) overlay.addPoint(s.clientX - rect!.left, s.clientY - rect!.top);
+        overlay.addPoint(pos.x, pos.y);
         if (e.pointerType !== 'mouse' && activeTool) drawingOverlayRef.current.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS[activeTool] ?? 4);
 
         if (lastInkPos.current && !isAdmin) {

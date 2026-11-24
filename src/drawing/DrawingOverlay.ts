@@ -1,8 +1,8 @@
 import type { Viewer } from "mapillary-js";
 import { applyShading, shadeRegion } from "../deep/strokeShading";
 import { SurfaceDecal, loadDeepData, surfaceRing, type DeepData } from "../deep/surfaceDecal";
-import { GeodesicMap, mergePieces, pieceGrid, type BakedPiece } from "../deep/geodesicMap";
-import { DecalLayer, makeDecalTool, preloadDecalTools, simplify, type ToolType } from "../deep/decalTools";
+import { mergePieces, type BakedPiece } from "../deep/geodesicMap";
+import { preloadDecalTools, simplify, type ToolType } from "../deep/decalTools";
 import { basicToTex, eraseBox, isBlank, isEraseEdit, type EraseEdit, type UndoEntry } from "./eraser";
 import { ChalkBrush } from "./flat/crayon";
 import { FountainPenBrush } from "./flat/fountainPen";
@@ -12,11 +12,12 @@ import type { Projector, SplashParticle, Unprojector } from "./flat/types";
 import { WatercolorBrush } from "./flat/watercolor";
 import { PeerCursors } from "./PeerCursors";
 import { PeerPreviews } from "./PeerPreviews";
+import { buildPanoramaGeometry, buildScreenGeometry, drawTexturedTriangle, projectionUniforms, projectToScreen } from "./projection";
 import { getRainbowHueShift, resolveRainbowColor } from "./rainbow";
 import type { ProjectionContext, Scene } from "./scene";
 import { copyCanvas, ensureCanvas, texSource, type MarkerTexture } from "./strokes";
-import { DEEP_NEAR_RADIUS, MID_SAMPLE, type DecalState, type Replay } from "./surfaceStrokes";
-import { WebGLDrawingRenderer, type GPUProjectionUniforms } from "./WebGLDrawingRenderer";
+import { bakePiece, continues, drawLivePieces, isSky, MID_SAMPLE, paintFrame, pieceTexture, startPiece, type DecalState, type Replay } from "./surfaceStrokes";
+import { WebGLDrawingRenderer } from "./WebGLDrawingRenderer";
 import { realtime } from "../realtime/client";
 import type { PreviewView } from "../pool/localPreview";
 import { followCamera, screenProjection, type PhotoTransform, type RenderCamera, type Subscription } from "../viewer/mapillaryInternals";
@@ -92,7 +93,6 @@ export class DrawingOverlay {
   /** Called once a place is ready to draw on. */
   onReady?: () => void;
   private useWebGL: boolean = false;
-  private _gpuPathLogged: boolean = false;
 
   // Cached mapillary internals (subscribed in setViewer)
   private _cachedRenderCamera: RenderCamera | null = null;
@@ -127,7 +127,7 @@ export class DrawingOverlay {
       get fov() { return overlay.currentFov; },
       get radPerPx() { return ((overlay.currentFov * Math.PI) / 180) / Math.max(1, overlay.canvas.height); },
       projection: () => this.getSyncProjectionContext(),
-      isSky: (u, v) => this.isSkyAtBasic(u, v),
+      isSky: (u, v) => isSky(this._deepData, u, v),
     };
     this.peers = new PeerCursors(this.scene);
     this.peerPreviews = new PeerPreviews(this.scene, this.peers, {
@@ -244,7 +244,7 @@ export class DrawingOverlay {
     if (!this.viewer || !this.webglRenderer || (list.length === 0 && live.length === 0))
       return;
 
-    const gpuUniforms = this.getGPUProjectionUniforms();
+    const gpuUniforms = projectionUniforms(this.getSyncProjectionContext());
     if (!gpuUniforms) return;
 
     this.webglRenderer.clear();
@@ -253,7 +253,7 @@ export class DrawingOverlay {
     const hueShift = getRainbowHueShift();
 
     for (const tex of list) {
-      if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
+      if (!tex._gpuBasicCoords) buildPanoramaGeometry(tex);
       if (!tex._gpuVertexCount) continue;
 
       const texOpacity = tex.opacity ?? 1;
@@ -266,191 +266,7 @@ export class DrawingOverlay {
         tex.isRainbow ? hueShift : 0,
       );
     }
-    this.drawLiveDecals(live);
-  }
-
-  private buildGLGeometry(tex: MarkerTexture): void {
-    const projectedGrid = tex.cachedProjection;
-    if (!projectedGrid) return;
-
-    const maxTris = tex.gridRows * tex.gridCols * 2;
-    const positions = new Float32Array(maxTris * 6);
-    const texCoords = new Float32Array(maxTris * 6);
-    let triCount = 0;
-
-    for (let row = 0; row < tex.gridRows; row++) {
-      for (let col = 0; col < tex.gridCols; col++) {
-        const tl = projectedGrid[row][col];
-        const tr = projectedGrid[row][col + 1];
-        const bl = projectedGrid[row + 1][col];
-        const br = projectedGrid[row + 1][col + 1];
-        if (!tl || !tr || !bl || !br) continue;
-
-        const u0 = col / tex.gridCols,
-          v0 = row / tex.gridRows;
-        const u1 = (col + 1) / tex.gridCols,
-          v1 = (row + 1) / tex.gridRows;
-
-        let b = triCount * 6;
-        positions[b] = tl[0];
-        positions[b + 1] = tl[1];
-        positions[b + 2] = tr[0];
-        positions[b + 3] = tr[1];
-        positions[b + 4] = bl[0];
-        positions[b + 5] = bl[1];
-        texCoords[b] = u0;
-        texCoords[b + 1] = v0;
-        texCoords[b + 2] = u1;
-        texCoords[b + 3] = v0;
-        texCoords[b + 4] = u0;
-        texCoords[b + 5] = v1;
-        triCount++;
-
-        b = triCount * 6;
-        positions[b] = tr[0];
-        positions[b + 1] = tr[1];
-        positions[b + 2] = br[0];
-        positions[b + 3] = br[1];
-        positions[b + 4] = bl[0];
-        positions[b + 5] = bl[1];
-        texCoords[b] = u1;
-        texCoords[b + 1] = v0;
-        texCoords[b + 2] = u1;
-        texCoords[b + 3] = v1;
-        texCoords[b + 4] = u0;
-        texCoords[b + 5] = v1;
-        triCount++;
-      }
-    }
-
-    tex._glPositions = positions.subarray(0, triCount * 6);
-    tex._glTexCoords = texCoords.subarray(0, triCount * 6);
-    tex._glTriCount = triCount;
-  }
-
-  /**
-   * Build GPU projection geometry for a MarkerTexture.
-   * Called once when a texture is created — stores basic coords and UVs
-   * as Float32Arrays that never change (projection happens on GPU).
-   */
-  private buildGPUGeometry(tex: MarkerTexture): void {
-    const maxTris = tex.gridRows * tex.gridCols * 2;
-    const basicCoords = new Float32Array(maxTris * 6);
-    const texCoords = new Float32Array(maxTris * 6);
-    let triCount = 0;
-
-    for (let row = 0; row < tex.gridRows; row++) {
-      for (let col = 0; col < tex.gridCols; col++) {
-        const tl = tex.gridBasic[row][col];
-        const tr = tex.gridBasic[row][col + 1];
-        const bl = tex.gridBasic[row + 1][col];
-        const br = tex.gridBasic[row + 1][col + 1];
-
-        // Skip cells with failed unprojection (zero coords)
-        if (
-          (!tl[0] && !tl[1]) ||
-          (!tr[0] && !tr[1]) ||
-          (!bl[0] && !bl[1]) ||
-          (!br[0] && !br[1])
-        )
-          continue;
-
-        const u0 = col / tex.gridCols,
-          v0 = row / tex.gridRows;
-        const u1 = (col + 1) / tex.gridCols,
-          v1 = (row + 1) / tex.gridRows;
-
-        // Triangle 1: tl, tr, bl
-        let b = triCount * 6;
-        basicCoords[b] = tl[0];
-        basicCoords[b + 1] = tl[1];
-        basicCoords[b + 2] = tr[0];
-        basicCoords[b + 3] = tr[1];
-        basicCoords[b + 4] = bl[0];
-        basicCoords[b + 5] = bl[1];
-        texCoords[b] = u0;
-        texCoords[b + 1] = v0;
-        texCoords[b + 2] = u1;
-        texCoords[b + 3] = v0;
-        texCoords[b + 4] = u0;
-        texCoords[b + 5] = v1;
-        triCount++;
-
-        // Triangle 2: tr, br, bl
-        b = triCount * 6;
-        basicCoords[b] = tr[0];
-        basicCoords[b + 1] = tr[1];
-        basicCoords[b + 2] = br[0];
-        basicCoords[b + 3] = br[1];
-        basicCoords[b + 4] = bl[0];
-        basicCoords[b + 5] = bl[1];
-        texCoords[b] = u1;
-        texCoords[b + 1] = v0;
-        texCoords[b + 2] = u1;
-        texCoords[b + 3] = v1;
-        texCoords[b + 4] = u0;
-        texCoords[b + 5] = v1;
-        triCount++;
-      }
-    }
-
-    tex._gpuBasicCoords = basicCoords.subarray(0, triCount * 6);
-    tex._gpuTexCoords = texCoords.subarray(0, triCount * 6);
-    tex._gpuVertexCount = triCount * 3;
-  }
-
-  /**
-   * Extract projection uniforms from mapillary internals for GPU projection.
-   * Returns null if internals are not accessible.
-   */
-  private getGPUProjectionUniforms(): GPUProjectionUniforms | null {
-    // Reuse the same internal access path that getSyncProjectionContext() uses
-    const ctx = this.getSyncProjectionContext();
-    if (!ctx) return null;
-
-    try {
-      const perspective = ctx.renderCamera.perspective;
-      const transform = ctx.transform;
-
-      if (!perspective || !transform) return null;
-
-      const rtMatrix = transform.rt;
-      if (!rtMatrix?.clone) return null;
-
-      const cameraToWorld = rtMatrix.clone().invert();
-
-      if (
-        !perspective.projectionMatrix?.elements ||
-        !perspective.matrixWorldInverse?.elements ||
-        !cameraToWorld.elements
-      )
-        return null;
-
-      // Camera type: 'perspective' | 'spherical' | 'fisheye'
-      const cameraTypeStr = transform.cameraType;
-      let cameraType = 0;
-      if (cameraTypeStr === "spherical") cameraType = 1;
-      else if (cameraTypeStr === "fisheye") cameraType = 2;
-
-      return {
-        cameraToWorld: new Float32Array(cameraToWorld.elements),
-        projectionMatrix: new Float32Array(
-          perspective.projectionMatrix.elements,
-        ),
-        viewMatrix: new Float32Array(perspective.matrixWorldInverse.elements),
-        focal: transform.focal,
-        imageWidth: transform.width,
-        imageHeight: transform.height,
-        ck1: transform.ck1 || 0,
-        ck2: transform.ck2 || 0,
-        orientation: transform.orientation || 1,
-        cameraType,
-      };
-    } catch (e) {
-      if (!this._gpuPathLogged)
-        console.error("[GPU] uniform extraction error:", e);
-      return null;
-    }
+    drawLivePieces(this.webglRenderer, live);
   }
 
   // ── Realtime Collaboration ─────────────────────────────────────────
@@ -673,7 +489,7 @@ export class DrawingOverlay {
   /** Everything painted here as seen from this view (transparent background; ss = supersampling). */
   renderPreview(view: PreviewView, ss: number): HTMLCanvasElement | null {
     const draws = this.drawList().flatMap((tex) => {
-      if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
+      if (!tex._gpuBasicCoords) buildPanoramaGeometry(tex);
       return tex._gpuVertexCount
         ? [{ source: texSource(tex), basic: tex._gpuBasicCoords!, uv: tex._gpuTexCoords!, opacity: tex.opacity ?? 1 }]
         : [];
@@ -806,7 +622,7 @@ export class DrawingOverlay {
     if (!this.canDrawDecals() || m.color === "rainbow") return false;
     const toolType = (["pencil", "marker", "crayon", "fountainPen", "watercolor"] as const).find((t) => t === m.toolType);
     if (!toolType) return false;
-    const st = this.makeDecalAt([m.u, m.v], 1, m.wpp, true, { color: m.color, lineWidth: m.lineWidth, toolType }, m.seed ?? 0, m.group ?? 0, m.fov);
+    const st = startPiece(this._deepData!, [m.u, m.v], 1, m.wpp, true, { color: m.color, lineWidth: m.lineWidth, toolType }, m.seed ?? 0, m.group ?? 0, m.fov);
     if (!st) return false;
     this.peerPreviews.end(id);
     const r: Replay = { st, group: m.group, ended: false, dead: false, mids: [], tex: null };
@@ -857,7 +673,7 @@ export class DrawingOverlay {
       st.prev = { basic: b, decal: d, screen: [0, 0] };
       r.mids.push(d);
       if (mid) continue;
-      this.paintFrame(st, r.mids, b);
+      paintFrame(st, r.mids, b, this.canvas.height);
       r.mids = [];
     }
     this.render();
@@ -865,8 +681,8 @@ export class DrawingOverlay {
 
   private replayEnd(id: string, r: Replay): void {
     r.ended = true;
-    const piece = this.bakePiece(r.st);
-    if (piece) r.tex = this.pieceTexture(piece, r.st);
+    const piece = bakePiece(r.st);
+    if (piece) r.tex = pieceTexture(piece, r.st);
     this.releaseDecal(r.st);
     // the finished bitmap arrives once the whole stroke (all its pieces) is over
     this.expireReplay(id, r, 60000);
@@ -1776,7 +1592,7 @@ export class DrawingOverlay {
     const b = this.screenToBasic(pixelX, pixelY);
     if (!b) return why("no projection");
     const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-    const st = this.makeDecalAt(b, radPerPx, worldPerPx, false, this._strokeParams!, Math.floor(Math.random() * 2 ** 31), this._strokeGroup, this.currentFov);
+    const st = startPiece(this._deepData, b, radPerPx, worldPerPx, false, this._strokeParams!, Math.floor(Math.random() * 2 ** 31), this._strokeGroup, this.currentFov);
     if (!st) return why("no surface (sky)");
     st.prev.screen = [pixelX, pixelY];
     if (import.meta.env.DEV && (globalThis as { __deepDebug?: boolean }).__deepDebug) console.info(`[deep] wrap @${pixelX | 0},${pixelY | 0}${worldPerPx ? " (chained)" : ""}`);
@@ -1785,49 +1601,6 @@ export class DrawingOverlay {
 
   private canDrawDecals(): boolean {
     return !!(this._deepData && this.useWebGL && this.webglRenderer?.hasGPUProjection() && this.webglRenderer.hasDeepStrokes());
-  }
-
-  /**
-   * A surface decal starting at panorama point b. Deterministic for the same inputs, which is
-   * what lets other people rebuild exactly the drawer's decal (exact = use worldPerPx as is).
-   */
-  private makeDecalAt(
-    b: [number, number], radPerPx: number, worldPerPx: number | undefined, exact: boolean,
-    params: { color: string; lineWidth: number; toolType: ToolType }, seed: number, group: number, fov: number,
-  ): DecalState | null {
-    if (!this._deepData) return null;
-    const decal = SurfaceDecal.create(this._deepData, b[0], b[1], radPerPx, worldPerPx, exact);
-    if (!decal) return null;
-    const geo = new GeodesicMap(this._deepData, b[0], b[1], decal.basis);
-    geo.openTo(b[0], b[1]);
-    const near = DEEP_NEAR_RADIUS[params.toolType] ?? 14;
-    geo.markNear(b[0], b[1], near * geo.s);
-    const layer = new DecalLayer();
-    const tool = makeDecalTool(params.toolType, layer, params.color, params.lineWidth, seed);
-    const c: [number, number] = [geo.cx, geo.cy];
-    tool.begin(c[0], c[1]);
-    return {
-      geo,
-      surface: this._deepData.surface,
-      layer,
-      tool,
-      seed,
-      params,
-      toolType: params.toolType,
-      geom: null,
-      fov,
-      group,
-      nearRadius: near,
-      prev: { basic: [b[0], b[1]], decal: c, screen: [0, 0] },
-      painted: c,
-      marked: c,
-      track: [],
-      off: [],
-      gap: false,
-      hasPaint: false,
-      cells: new Map(),
-      start: [b[0], b[1]],
-    };
   }
 
   /** Screen px -> basic coords via Mapillary's sync projection (null if unavailable). */
@@ -1842,24 +1615,10 @@ export class DrawingOverlay {
     }
   }
 
-  /** Is this panorama point sky (no depth = nothing to paint)? False without depth data. */
-  private isSkyAtBasic(u: number, v: number): boolean {
-    const d = this._deepData;
-    if (!d) return false;
-    const x = ((Math.floor(u * 2048) % 2048) + 2048) % 2048;
-    const y = Math.min(1023, Math.max(0, Math.floor(v * 1024)));
-    return !(d.dist[y * 2048 + x] > 0);
-  }
-
   /** Is this screen point on the sky (no paintable surface)? */
   private isSkyAt(x: number, y: number): boolean {
-    const d = this._deepData;
-    if (!d) return false;
-    const b = this.screenToBasic(x, y);
-    if (!b) return false;
-    const i = Math.min(1023, Math.max(0, Math.floor(b[1] * 1024)));
-    const j = ((Math.floor(b[0] * 2048) % 2048) + 2048) % 2048;
-    return !(d.dist[i * 2048 + j] > 0);
+    const b = this._deepData && this.screenToBasic(x, y);
+    return !!b && isSky(this._deepData, b[0], b[1]);
   }
 
   /** Brush samples (u, v, decal x, y) not yet sent. */
@@ -1912,7 +1671,7 @@ export class DrawingOverlay {
     this._chainTimes = this._chainTimes.filter((t) => now - t < 400);
     const hop = Math.min(48, 6 + 4 * this._chainTimes.length);
     const d = st.geo.reach(b[0], b[1]);
-    if (d && this.continues(st, b, d)) {
+    if (d && continues(st, b, d)) {
       if (!st.gap || Math.hypot(x - st.prev.screen[0], y - st.prev.screen[1]) <= hop) {
         st.gap = false;
         st.off = [];
@@ -1930,31 +1689,6 @@ export class DrawingOverlay {
     st.off.push([x, y]);
     const [ox, oy] = st.off[0];
     if (Math.hypot(x - ox, y - oy) >= hop) this.leaveSurface();
-  }
-
-  /** Is decal point d at b a step along the same surface from the last point, not a jump? */
-  private continues(st: DecalState, b: [number, number], d: [number, number]): boolean {
-    const moved = Math.hypot(d[0] - st.prev.decal[0], d[1] - st.prev.decal[1]);
-    if (this.folds(st, b, d)) return false;
-    if (moved < 6) return true;
-    const s = st.geo.step(st.prev.basic, b);
-    // the sheet can't be much longer than the straight line between two close points, unless they
-    // are only connected the long way round (an object's edge, or a loop that doesn't close)
-    return moved < s.px * 1.6 + 4;
-  }
-
-  /**
-   * On a long stroke over bumpy surfaces the unfolded sheet can overlap itself: two places far apart
-   * get the same decal coordinates, and paint for one would show up in the other as a smear.
-   */
-  private folds(st: DecalState, b: [number, number], d: [number, number]): boolean {
-    const cell = st.nearRadius * 2, cx = Math.floor(d[0] / cell), cy = Math.floor(d[1] / cell);
-    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-      const at = st.cells.get((cy + j) * 4096 + cx + i);
-      if (at && st.geo.step(at, b).px > cell * 4) return true;
-    }
-    st.cells.set(cy * 4096 + cx, b);
-    return false;
   }
 
   /** The path is off this piece's surface for good: continue the stroke from where it left. */
@@ -1982,7 +1716,7 @@ export class DrawingOverlay {
     const params = this._strokeParams;
     if (!st || !params) return false;
     const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-    const next = this.makeDecalAt(b, radPerPx, worldPerPx, false, params, Math.floor(Math.random() * 2 ** 31), this._strokeGroup, this.currentFov);
+    const next = this._deepData && startPiece(this._deepData, b, radPerPx, worldPerPx, false, params, Math.floor(Math.random() * 2 ** 31), this._strokeGroup, this.currentFov);
     if (!next) { st.gap = true; return false; }
     next.prev.screen = [x, y];
     this.endPiece(st);
@@ -2009,46 +1743,7 @@ export class DrawingOverlay {
       this._pendingSamples.push(+track[i].basic[0].toFixed(6), +track[i].basic[1].toFixed(6), pts[i][0] + (mid ? MID_SAMPLE : 0), pts[i][1]);
     });
     this.flushStrokeSamples();
-    this.paintFrame(st, kept, track[track.length - 1].basic);
-  }
-
-  /** Let a piece's brush paint one frame's points; at = the last one in the panorama. */
-  private paintFrame(st: DecalState, pts: [number, number][], at: [number, number]): void {
-    const g = st.geo;
-    st.tool.frame(pts);
-    st.painted = pts[pts.length - 1];
-    st.hasPaint = true;
-    g.markNear(at[0], at[1], st.nearRadius * g.s);
-    // splatters land away from the path: unwrap out to them and let paint show there
-    const spots = st.tool.spots;
-    if (!spots.length) return;
-    st.tool.spots = [];
-    const far = Math.max(...spots.map((sp) => Math.hypot(sp.x - st.painted[0], sp.y - st.painted[1]) + sp.radius));
-    const radPerPx = ((st.fov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-    const reach = Math.ceil((far * radPerPx * 1024) / Math.PI) + 4;
-    if (reach > 38) g.openTo(at[0], at[1], Math.min(80, reach), true);
-    for (const sp of spots) {
-      const b = g.basicAt(sp.x, sp.y);
-      if (b) g.markNear(b[0], b[1], (sp.radius + 2) * g.s);
-    }
-  }
-
-  /** Bake what the brush painted into a panorama bitmap (null = nothing to see). */
-  private bakePiece(st: DecalState): BakedPiece | null {
-    const l = st.layer;
-    if (!st.hasPaint || !l.w || !l.h) return null;
-    return st.geo.bake(l.ctx.getImageData(0, 0, l.w, l.h), { x0: l.x0, y0: l.y0, w: l.w, h: l.h }, st.surface);
-  }
-
-  private pieceTexture(piece: BakedPiece, st: DecalState): MarkerTexture {
-    const grid = pieceGrid(piece);
-    return {
-      canvas: piece.canvas,
-      toolType: st.toolType === "marker" ? undefined : st.toolType,
-      gridBasic: grid.gridBasic, gridRows: grid.rows, gridCols: grid.cols,
-      srcWidth: piece.canvas.width, srcHeight: piece.canvas.height,
-      referenceFov: st.fov, strokeGroup: st.group, opacity: 1,
-    };
+    paintFrame(st, kept, track[track.length - 1].basic, this.canvas.height);
   }
 
   private releaseDecal(st: DecalState): void {
@@ -2061,8 +1756,8 @@ export class DrawingOverlay {
     this.paintTrack(st);
     this.flushStrokeSamples(true);
     this.broadcastStrokeEnd();
-    const piece = this.bakePiece(st);
-    if (piece) this._pieces.push({ piece, tex: this.pieceTexture(piece, st) });
+    const piece = bakePiece(st);
+    if (piece) this._pieces.push({ piece, tex: pieceTexture(piece, st) });
     this.releaseDecal(st);
     if (this._activeDecal === st) this._activeDecal = null;
   }
@@ -2085,7 +1780,7 @@ export class DrawingOverlay {
     if (!pieces.length) { this.render(); return; }
     let tex = pieces[0].tex;
     if (pieces.length > 1) {
-      tex = this.pieceTexture(mergePieces(pieces.map((p) => p.piece)), st);
+      tex = pieceTexture(mergePieces(pieces.map((p) => p.piece)), st);
       for (const p of pieces) this.webglRenderer?.invalidateTexture(texSource(p.tex));
     }
     tex.isLocal = true;
@@ -2111,52 +1806,6 @@ export class DrawingOverlay {
     for (const list of this._replays.values()) for (const r of list) if (!r.ended && !r.dead && r.st.hasPaint) out.push(r.st);
     if (this._activeDecal?.hasPaint) out.push(this._activeDecal);
     return out;
-  }
-
-  /** Draw live 3D strokes with the deep shader (projection uniforms already set this frame). */
-  private drawLiveDecals(live: DecalState[]): void {
-    const r = this.webglRenderer;
-    if (!r) return;
-    for (const st of live) {
-      const g = st.geo, bb = g.paintBox;
-      if (!isFinite(bb.r0)) continue;
-      // geometry covering the reached area (rebuilt only when it grows)
-      const key = `${bb.r0},${bb.c0},${bb.r1},${bb.c1}`;
-      if (!st.geom || st.geom.key !== key) {
-        const r0 = bb.r0, c0 = bb.c0, r1 = bb.r1 + 1, c1 = bb.c1 + 1;
-        const rows = Math.max(1, Math.min(32, Math.ceil((r1 - r0) / 16)));
-        const cols = Math.max(1, Math.min(32, Math.ceil((c1 - c0) / 16)));
-        const basic = new Float32Array(rows * cols * 12), tex = new Float32Array(rows * cols * 12);
-        let k = 0;
-        const put = (gr: number, gc: number) => {
-          const rr = r0 + (gr / rows) * (r1 - r0), cc = c0 + (gc / cols) * (c1 - c0);
-          basic[k] = (g.j0 + cc) / 2048; basic[k + 1] = (g.i0 + rr) / 1024;
-          tex[k] = cc / g.RW; tex[k + 1] = rr / g.RH;
-          k += 2;
-        };
-        for (let gr = 0; gr < rows; gr++) for (let gc = 0; gc < cols; gc++) {
-          put(gr, gc); put(gr + 1, gc); put(gr, gc + 1);
-          put(gr, gc + 1); put(gr + 1, gc); put(gr + 1, gc + 1);
-        }
-        st.geom = { key, basic, tex };
-      }
-      r.drawDeepStroke({
-        key: g,
-        dem: g.tex,
-        regionW: g.RW,
-        regionH: g.RH,
-        regionOrigin: [g.j0, g.i0],
-        dirty: g.dirty,
-        basicCoords: st.geom.basic,
-        texCoords: st.geom.tex,
-        layer: st.layer,
-        surface: st.surface,
-        panoW: 2048,
-        panoH: 1024,
-      });
-      g.dirty = null;
-      st.layer.dirty = null;
-    }
   }
 
   private _liveCanvas: HTMLCanvasElement | null = null;
@@ -2463,27 +2112,6 @@ export class DrawingOverlay {
     return p && { proj: p.projection, container: p.container, renderCamera: this._cachedRenderCamera, transform: this._cachedTransform };
   }
 
-  private syncProjectWithContext(
-    basicPoint: number[],
-    ctx: ProjectionContext | null,
-  ): [number, number] | null | undefined {
-    if (!ctx) return undefined;
-    try {
-      const canvasPoint = ctx.proj.basicToCanvas(
-        basicPoint,
-        ctx.container,
-        ctx.renderCamera,
-        ctx.transform,
-      );
-      if (canvasPoint) {
-        return [Math.round(canvasPoint[0]), Math.round(canvasPoint[1])];
-      }
-      return null;
-    } catch {
-      return undefined;
-    }
-  }
-
   private async renderMarkerTextures(): Promise<void> {
     const live = this.liveDecals();
     const list = this.drawList();
@@ -2492,13 +2120,13 @@ export class DrawingOverlay {
     // ── GPU projection fast path ─────────────────────────────────────────
     // No per-texture JS projection — GPU transforms basic→screen in vertex shader
     if (this.useWebGL && this.webglRenderer?.hasGPUProjection()) {
-      const gpuUniforms = this.getGPUProjectionUniforms();
+      const gpuUniforms = projectionUniforms(this.getSyncProjectionContext());
       if (gpuUniforms) {
         this.webglRenderer.setGPUProjectionUniforms(gpuUniforms);
 
         const hueShift = getRainbowHueShift();
         for (const tex of list) {
-          if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
+          if (!tex._gpuBasicCoords) buildPanoramaGeometry(tex);
           if (!tex._gpuVertexCount) continue;
 
           const texOpacity = tex.opacity ?? 1;
@@ -2511,7 +2139,7 @@ export class DrawingOverlay {
             tex.isRainbow ? hueShift : 0,
           );
         }
-        this.drawLiveDecals(live);
+        drawLivePieces(this.webglRenderer, live);
         return;
       }
     }
@@ -2533,7 +2161,7 @@ export class DrawingOverlay {
         outer: for (let row = 0; row <= tex.gridRows; row++) {
           const rowPoints: ([number, number] | null)[] = [];
           for (let col = 0; col <= tex.gridCols; col++) {
-            const syncPoint = this.syncProjectWithContext(
+            const syncPoint = projectToScreen(
               tex.gridBasic[row][col],
               syncCtx,
             );
@@ -2549,7 +2177,7 @@ export class DrawingOverlay {
         if (canSync) {
           tex.cachedProjection = projectedGrid;
           tex.needsProjection = false;
-          if (this.useWebGL) this.buildGLGeometry(tex);
+          if (this.useWebGL) buildScreenGeometry(tex);
           continue;
         }
       }
@@ -2585,7 +2213,7 @@ export class DrawingOverlay {
           }
           tex.cachedProjection = projectedGrid;
           tex.needsProjection = false;
-          if (this.useWebGL) this.buildGLGeometry(tex);
+          if (this.useWebGL) buildScreenGeometry(tex);
         }
       }
     }
@@ -2622,7 +2250,8 @@ export class DrawingOverlay {
               if (!tl || !tr || !bl || !br) continue;
               const srcX = col * cellWidth;
               const srcY = row * cellHeight;
-              this.drawTexturedTriangle(
+              drawTexturedTriangle(
+                this.ctx,
                 texSource(tex),
                 srcX,
                 srcY,
@@ -2637,7 +2266,8 @@ export class DrawingOverlay {
                 bl[0],
                 bl[1],
               );
-              this.drawTexturedTriangle(
+              drawTexturedTriangle(
+                this.ctx,
                 texSource(tex),
                 srcX + cellWidth,
                 srcY,
@@ -2660,76 +2290,6 @@ export class DrawingOverlay {
         this.ctx.globalAlpha = savedAlpha;
       }
     }
-  }
-
-  private drawTexturedTriangle(
-    img: HTMLCanvasElement | HTMLImageElement,
-    sx0: number,
-    sy0: number,
-    sx1: number,
-    sy1: number,
-    sx2: number,
-    sy2: number,
-    dx0: number,
-    dy0: number,
-    dx1: number,
-    dy1: number,
-    dx2: number,
-    dy2: number,
-  ): void {
-    this.ctx.save();
-    this.ctx.beginPath();
-    this.ctx.moveTo(dx0, dy0);
-    this.ctx.lineTo(dx1, dy1);
-    this.ctx.lineTo(dx2, dy2);
-    this.ctx.closePath();
-    this.ctx.clip();
-
-    const x0 = sx0,
-      y0 = sy0;
-    const x1 = sx1,
-      y1 = sy1;
-    const x2 = sx2,
-      y2 = sy2;
-
-    const u0 = dx0,
-      v0 = dy0;
-    const u1 = dx1,
-      v1 = dy1;
-    const u2 = dx2,
-      v2 = dy2;
-
-    const delta = x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1);
-    if (Math.abs(delta) < 0.0001) {
-      this.ctx.restore();
-      return;
-    }
-
-    const deltaA = u0 * (y1 - y2) + u1 * (y2 - y0) + u2 * (y0 - y1);
-    const deltaB = x0 * (u1 - u2) + x1 * (u2 - u0) + x2 * (u0 - u1);
-    const deltaC =
-      x0 * (y1 * u2 - y2 * u1) +
-      x1 * (y2 * u0 - y0 * u2) +
-      x2 * (y0 * u1 - y1 * u0);
-
-    const deltaD = v0 * (y1 - y2) + v1 * (y2 - y0) + v2 * (y0 - y1);
-    const deltaE = x0 * (v1 - v2) + x1 * (v2 - v0) + x2 * (v0 - v1);
-    const deltaF =
-      x0 * (y1 * v2 - y2 * v1) +
-      x1 * (y2 * v0 - y0 * v2) +
-      x2 * (y0 * v1 - y1 * v0);
-
-    this.ctx.transform(
-      deltaA / delta,
-      deltaD / delta,
-      deltaB / delta,
-      deltaE / delta,
-      deltaC / delta,
-      deltaF / delta,
-    );
-
-    this.ctx.drawImage(img, 0, 0);
-    this.ctx.restore();
   }
 
   private async render(): Promise<void> {

@@ -27,29 +27,15 @@ function detentHeights(vh: number, safeTop: number, safeBottom: number) {
 
 /** Height of an element, kept up to date (headers overlay the content, which pads by this). */
 function useHeight<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
+  const [el, ref] = useState<T | null>(null);
   const [h, setH] = useState(0);
   useLayoutEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const ro = new ResizeObserver(() => setH(el.offsetHeight));
-    ro.observe(el);
-    setH(el.offsetHeight);
+    ro.observe(el); // also reports the height right away
     return () => ro.disconnect();
-  });
+  }, [el]);
   return [ref, h] as const;
-}
-
-export function useIsPhone() {
-  const query = '(max-width: 599px)';
-  const [phone, setPhone] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
-  useEffect(() => {
-    const mq = window.matchMedia(query);
-    const on = () => setPhone(mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  }, []);
-  return phone;
 }
 
 export default function MobileSheet({
@@ -122,7 +108,7 @@ export default function MobileSheet({
 
   // latest values for the long-lived touch listeners (re-binding them mid-drag would lose the drag)
   const live = useRef({ heights, detent, snap });
-  live.current = { heights, detent, snap };
+  useLayoutEffect(() => { live.current = { heights, detent, snap }; });
 
   // Touch drag (non-passive so we can stop the page/content from scrolling while dragging)
   useEffect(() => {
@@ -239,15 +225,14 @@ export function CitiesModal({ open, onClose, children }: { open: boolean; onClos
   const scroll = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (open) {
-      setShown(true);
       const id = requestAnimationFrame(() => requestAnimationFrame(() => setEntered(true)));
       return () => cancelAnimationFrame(id);
     }
-    setEntered(false);
-    const t = setTimeout(() => { setShown(false); setDrag(0); }, 480);
+    const t = setTimeout(() => { setShown(false); setEntered(false); setDrag(0); }, 480);
     return () => clearTimeout(t);
   }, [open]);
   useEffect(() => { if (open) scroll.current?.scrollTo({ top: 0 }); }, [open]);
+  if (open && !shown) setShown(true);
   if (!shown) return null;
 
   const onTouchStart = (e: React.TouchEvent) => {
@@ -267,7 +252,7 @@ export function CitiesModal({ open, onClose, children }: { open: boolean; onClos
   };
 
   return (
-    <div className={`ex-modal ${entered ? 'is-open' : ''}`}>
+    <div className={`ex-modal ${open && entered ? 'is-open' : ''}`}>
       <div className="ex-modal__scrim" onClick={onClose} />
       <div className={`ex-modal__sheet ${drag ? 'is-dragging' : ''}`} style={drag ? { transform: `translateY(${drag}px)` } : undefined} role="dialog" aria-modal="true" aria-label="Cities">
         <div ref={headRef} className={`ex-modal__head ${scrolled ? 'is-scrolled' : ''}`} onTouchStart={onTouchStart}>

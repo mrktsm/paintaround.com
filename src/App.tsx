@@ -17,19 +17,11 @@ import { showOwnDrawing } from './pool/localPreview';
 import { loadDeepData } from './deep/surfaceDecal';
 import CloseIcon from './components/CloseIcon';
 import { START_ZOOM } from './pool/startView';
+import { rotateBy, zoomTo } from './viewer/mapillaryInternals';
 import { DARK_UI } from './theme';
 
 /** Tool body for the current appearance (tips/bands are shared). */
 const toolBase = (name: string) => `/tools/${name}-base${DARK_UI ? '-dark' : ''}.png`;
-
-// Keep WebGL canvases readable after they are shown
-const _origGetContext = HTMLCanvasElement.prototype.getContext;
-HTMLCanvasElement.prototype.getContext = function(this: HTMLCanvasElement, type: string, attrs?: any) {
-  if (type === 'webgl' || type === 'webgl2') {
-    attrs = { ...attrs, preserveDrawingBuffer: true };
-  }
-  return (_origGetContext as any).call(this, type, attrs);
-} as any;
 
 // Pool for each tool's random default colour (the toolbar shows a single picker swatch).
 // On-screen brush radius per tool (px at the stroke start) for the brush cursor — measured from
@@ -327,7 +319,7 @@ function App({ panorama }: { panorama: Panorama }) {
         viewerRef.current = null;
       }
     };
-  }, [imageId, panorama.thumbnailView?.u, panorama.thumbnailView?.v]);
+  }, [imageId, panorama, refreshUndoRedo]);
 
   useEffect(() => {
     activeToolRef.current = activeTool;
@@ -490,8 +482,7 @@ function App({ panorama }: { panorama: Panorama }) {
         const hFov = pan.fov * (vw / vh);
         const movX = -(dx / vw) * (hFov / 360) * 1.25;
         const movY = -(dy / vh) * (pan.fov / 180) * 1.25;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (viewerRef.current as any)._navigator.stateService.rotateBasicUnbounded([movX, movY]);
+        rotateBy(viewerRef.current, movX, movY);
         pan.moveBuffer.push({ dx: movX, dy: movY, time: Date.now() });
         if (pan.moveBuffer.length > 20) pan.moveBuffer.shift();
         pan.lastX = pos.x;
@@ -531,8 +522,7 @@ function App({ panorama }: { panorama: Panorama }) {
       const movY = -(dy / vh) * (pinch.lastFov / 180) * 1.25;
 
       // rotateBasicUnbounded: delta-based, no 0-1 clamping, works for spherical
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (viewerRef.current as any)._navigator.stateService.rotateBasicUnbounded([movX, movY]);
+      rotateBy(viewerRef.current, movX, movY);
 
       // Buffer recent moves (keep last 50ms, matching Mapillary's _drainBuffer)
       const now = Date.now();
@@ -547,8 +537,7 @@ function App({ panorama }: { panorama: Panorama }) {
       const minDim = Math.min(vw, vh);
       const zoomDelta = 0.8 * distanceChange / minDim;
       const newZoom = Math.max(0, pinch.lastZoom + zoomDelta);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (viewerRef.current as any)._navigator.stateService.setZoom(newZoom);
+      zoomTo(viewerRef.current, newZoom);
       pinch.lastZoom = newZoom;
       pinch.lastDist = dist;
 
@@ -653,8 +642,7 @@ function App({ panorama }: { panorama: Panorama }) {
             inertiaRef.current = null;
             return;
           }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (viewerRef.current as any)._navigator.stateService.rotateBasicUnbounded([velX, velY]);
+          rotateBy(viewerRef.current, velX, velY);
           inertiaRef.current = requestAnimationFrame(tick);
         };
         inertiaRef.current = requestAnimationFrame(tick);
@@ -688,8 +676,7 @@ function App({ panorama }: { panorama: Panorama }) {
               inertiaRef.current = null;
               return;
             }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (viewerRef.current as any)._navigator.stateService.rotateBasicUnbounded([velX, velY]);
+            rotateBy(viewerRef.current, velX, velY);
             inertiaRef.current = requestAnimationFrame(tick);
           };
           inertiaRef.current = requestAnimationFrame(tick);
@@ -760,16 +747,13 @@ function App({ panorama }: { panorama: Panorama }) {
       if (!viewerRef.current) return;
       e.preventDefault();
       const viewer = viewerRef.current;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const svc = (viewer as any)._navigator.stateService;
       const now = performance.now();
       if (now - lastWheelAt > 220) gesture = null;
       lastWheelAt = now;
       // Trackpad scrolls are pixel-mode with small/fractional deltas or a horizontal component;
       // Chrome/Safari also report trackpads with wheelDelta exactly -3x delta (a mouse notch is
       // ±120). Mouse wheels send larger whole-number vertical steps. Pinch = wheel + ctrlKey.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const legacy = e as any;
+      const legacy = e as WheelEvent & { wheelDeltaY?: number };
       const looksTrackpad = e.deltaMode === 0 && (
         e.deltaX !== 0 || !Number.isInteger(e.deltaY) || Math.abs(e.deltaY) < 40 ||
         (typeof legacy.wheelDeltaY === 'number' && legacy.wheelDeltaY !== 0 && legacy.wheelDeltaY === -3 * e.deltaY));
@@ -787,7 +771,7 @@ function App({ panorama }: { panorama: Panorama }) {
         const hFov = fov * (vw / vh);
         const movX = (e.deltaX / vw) * (hFov / 360) * 1.25;
         const movY = (e.deltaY / vh) * (fov / 180) * 1.25;
-        svc.rotateBasicUnbounded([movX, movY]);
+        rotateBy(viewer, movX, movY);
         return;
       }
       if (!zoomInitialized) {
@@ -798,7 +782,7 @@ function App({ panorama }: { panorama: Panorama }) {
       // pinch deltas are small -> scale them up so pinch-zoom feels natural
       const delta = -e.deltaY * (e.ctrlKey ? 0.01 : 0.002);
       currentZoom = Math.max(0, Math.min(3, currentZoom + delta));
-      svc.setZoom(currentZoom);
+      zoomTo(viewer, currentZoom);
     };
     container.addEventListener('wheel', onWheel, { passive: false, capture: true });
     return () => container.removeEventListener('wheel', onWheel, { capture: true });

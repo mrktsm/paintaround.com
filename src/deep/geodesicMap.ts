@@ -108,7 +108,7 @@ export class GeodesicMap {
     this.seedR = si - this.i0;
     this.seedC = sj - this.j0;
     this.dSeed = Math.hypot(basis.P0[0], basis.P0[1], basis.P0[2]) || 1;
-    const tune = (globalThis as any).__brushPerspective;
+    const tune = (globalThis as { __brushPerspective?: number }).__brushPerspective;
     this.alpha = Math.max(0, Math.min(1, typeof tune === 'number' ? tune : GeodesicMap.SCREEN_LOCK));
     // reuse buffers from finished strokes (avoids ~40MB of allocation + GC per stroke)
     const buf = pool.pop() ?? {

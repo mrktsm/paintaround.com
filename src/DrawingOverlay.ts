@@ -12,6 +12,7 @@ import { DecalLayer, makeDecalTool, preloadDecalTools, simplify, type DecalTool,
 import { mulberry32, pencilGrain, pencilLook, strokeToPolygon, WCPoly, type Vec2 } from "./deep/brushParts";
 import { realtime } from "./realtime/client";
 import type { PreviewView } from "./pool/localPreview";
+import { followCamera, screenProjection, type PhotoTransform, type Projection, type RenderCamera, type Subscription } from "./viewer/mapillaryInternals";
 import { PAINT_LAYER, type CursorState, type FinishedStroke, type LayerTiles, type ServerMessage } from "../shared/realtime";
 
 /** Resolve 'rainbow' into a concrete CSS color using the same continuous
@@ -612,7 +613,7 @@ class Pen {
   private _initialized: boolean = false;
   private _history: { basicX: number; basicY: number; width: number }[] = [];
   private _off: HTMLCanvasElement | null = null;
-  setSeed(_seed: number): void {} // no randomness: the grain is fixed to the surface
+  setSeed(): void { /* no randomness: the grain is fixed to the surface */ }
 
   minX: number = Infinity;
   minY: number = Infinity;
@@ -1016,7 +1017,7 @@ class FountainPenBrush {
   private _strokeId: string | null = null;
   private _unprojector: Unprojector;
   private _initialized: boolean = false;
-  setSeed(_seed: number): void {} // no randomness
+  setSeed(): void { /* no randomness */ }
   private _history: { basicX: number; basicY: number; width: number }[] = [];
 
   private _offscreen: HTMLCanvasElement;
@@ -1431,6 +1432,14 @@ interface MarkerTexture {
 }
 
 /** Returns the best available texture source for WebGL / 2D drawing */
+/** Everything needed to project panorama coordinates to the screen in this frame. */
+interface ProjectionContext {
+  proj: Projection;
+  container: HTMLElement;
+  renderCamera: RenderCamera;
+  transform: PhotoTransform;
+}
+
 /** Other people's cursor rings fade in/out over this long instead of popping. */
 const CURSOR_FADE_MS = 250;
 
@@ -1624,14 +1633,9 @@ export class DrawingOverlay {
     lastY: number;
     fov: number;
   }[] = [];
-  private pendingTextures: {
-    stroke: any;
-    texture: MarkerTexture;
-  }[] = [];
-  private pendingPenTextures: {
-    stroke: any;
-    texture: MarkerTexture;
-  }[] = [];
+  /** Finished flat strokes waiting to join the others at the start of a frame. */
+  private pendingTextures: { stroke: DrawingOverlay["finalizingStrokes"][number]; texture: MarkerTexture | null }[] = [];
+  private pendingPenTextures: { stroke: DrawingOverlay["finalizingPenStrokes"][number]; texture: MarkerTexture | null }[] = [];
   private activeDrops: Drop[] = [];
   private activeSplashes: SplashParticle[] = [];
   private webglRenderer: WebGLDrawingRenderer | null = null;
@@ -1661,11 +1665,11 @@ export class DrawingOverlay {
   private _gpuPathLogged: boolean = false;
 
   // Cached mapillary internals (subscribed in setViewer)
-  private _cachedRenderCamera: any = null;
-  private _cachedTransform: any = null;
-  private _internalSubs: any[] = [];
+  private _cachedRenderCamera: RenderCamera | null = null;
+  private _cachedTransform: PhotoTransform | null = null;
+  private _internalSubs: Subscription[] = [];
   private _boundResize: (() => void) | null = null;
-  private _boundViewerListeners: { event: string; handler: (...args: any[]) => void }[] = [];
+  private _boundViewerListeners: (() => void)[] = [];
 
   // Undo/Redo stacks
   private _undoStack: UndoEntry[] = [];
@@ -1715,35 +1719,24 @@ export class DrawingOverlay {
       this.currentFov = await viewer.getFieldOfView();
     };
     viewer.on("fov", onFov);
-    this._boundViewerListeners.push({ event: "fov", handler: onFov });
+    this._boundViewerListeners.push(() => viewer.off("fov", onFov));
 
     viewer.getFieldOfView().then((fov) => {
       this.currentFov = fov;
     });
 
-    // Subscribe to internal observables to cache renderCamera and transform
+    // Follow the camera of every rendered frame
     try {
-      const viewerAny = viewer as any;
-      const renderService = viewerAny._container?.renderService;
-      const stateService = viewerAny._navigator?.stateService;
-
-      if (renderService?.renderCameraFrame$) {
-        this._internalSubs.push(
-          renderService.renderCameraFrame$.subscribe((rc: any) => {
-            this._cachedRenderCamera = rc;
-            this.invalidateProjectionCache();
-          }),
-        );
-      }
-      if (stateService?.currentTransform$) {
-        this._internalSubs.push(
-          stateService.currentTransform$.subscribe((t: any) => {
-            this._cachedTransform = t;
-          }),
-        );
-      }
+      this._internalSubs = followCamera(
+        viewer,
+        (camera) => {
+          this._cachedRenderCamera = camera;
+          this.invalidateProjectionCache();
+        },
+        (transform) => { this._cachedTransform = transform; },
+      );
     } catch (e) {
-      console.warn("[DrawingOverlay] Failed to subscribe to internals:", e);
+      console.warn("[DrawingOverlay] could not follow the viewer's camera:", e);
     }
 
     // Fallback: pov/bearing events for CPU path (when subscriptions fail)
@@ -1751,8 +1744,7 @@ export class DrawingOverlay {
     const onBearing = () => this.invalidateProjectionCache();
     viewer.on("pov", onPov);
     viewer.on("bearing", onBearing);
-    this._boundViewerListeners.push({ event: "pov", handler: onPov });
-    this._boundViewerListeners.push({ event: "bearing", handler: onBearing });
+    this._boundViewerListeners.push(() => viewer.off("pov", onPov), () => viewer.off("bearing", onBearing));
   }
 
   private invalidateProjectionCache(): void {
@@ -3003,7 +2995,7 @@ export class DrawingOverlay {
             // Finalize in background
             this.finalizeStroke(stroke)
               .then((tex) => {
-                this.pendingTextures.push({ stroke, texture: tex as any });
+                this.pendingTextures.push({ stroke, texture: tex });
                 if (tex) {
                   tex.brushStrokeId = stroke.brushStrokeId;
                   if (this._isRainbowStroke) {
@@ -3107,7 +3099,7 @@ export class DrawingOverlay {
           // Finalize pen stroke in background
           this.finalizePenStroke(stroke)
             .then((tex) => {
-              this.pendingPenTextures.push({ stroke, texture: tex as any });
+              this.pendingPenTextures.push({ stroke, texture: tex });
               if (tex) {
                 if (this._isRainbowStroke) {
                   tex.isRainbow = true;
@@ -3602,7 +3594,7 @@ export class DrawingOverlay {
   /** Build a surface decal for a stroke starting at this screen point (null = draw flat). */
   private makeDecal(pixelX: number, pixelY: number, worldPerPx?: number): DecalState | null {
     const why = (r: string) => {
-      if (import.meta.env.DEV && (globalThis as any).__deepDebug) console.info(`[deep] flat @${pixelX | 0},${pixelY | 0}: ${r}`);
+      if (import.meta.env.DEV && (globalThis as { __deepDebug?: boolean }).__deepDebug) console.info(`[deep] flat @${pixelX | 0},${pixelY | 0}: ${r}`);
       return null;
     };
     if (!this._deepData) return why("no deep data");
@@ -3613,7 +3605,7 @@ export class DrawingOverlay {
     const st = this.makeDecalAt(b, radPerPx, worldPerPx, false, this._strokeParams!, Math.floor(Math.random() * 2 ** 31), this._strokeGroup, this.currentFov);
     if (!st) return why("no surface (sky)");
     st.prev.screen = [pixelX, pixelY];
-    if (import.meta.env.DEV && (globalThis as any).__deepDebug) console.info(`[deep] wrap @${pixelX | 0},${pixelY | 0}${worldPerPx ? " (chained)" : ""}`);
+    if (import.meta.env.DEV && (globalThis as { __deepDebug?: boolean }).__deepDebug) console.info(`[deep] wrap @${pixelX | 0},${pixelY | 0}${worldPerPx ? " (chained)" : ""}`);
     return st;
   }
 
@@ -4291,32 +4283,15 @@ export class DrawingOverlay {
     this.render();
   }
 
-  private getSyncProjectionContext(): any {
-    try {
-      const viewerAny = this.viewer as any;
-      if (!viewerAny?._observer?._projection) return null;
-      if (!this._cachedRenderCamera || !this._cachedTransform) return null;
-
-      const container =
-        viewerAny._container?._container ??
-        viewerAny._container?.container ??
-        viewerAny._container?.element;
-      if (!container) return null;
-
-      return {
-        renderCamera: this._cachedRenderCamera,
-        transform: this._cachedTransform,
-        container,
-        proj: viewerAny._observer._projection,
-      };
-    } catch {
-      return null;
-    }
+  private getSyncProjectionContext(): ProjectionContext | null {
+    if (!this.viewer || !this._cachedRenderCamera || !this._cachedTransform) return null;
+    const p = screenProjection(this.viewer);
+    return p && { proj: p.projection, container: p.container, renderCamera: this._cachedRenderCamera, transform: this._cachedTransform };
   }
 
   private syncProjectWithContext(
     basicPoint: number[],
-    ctx: any,
+    ctx: ProjectionContext | null,
   ): [number, number] | null | undefined {
     if (!ctx) return undefined;
     try {
@@ -4330,7 +4305,7 @@ export class DrawingOverlay {
         return [Math.round(canvasPoint[0]), Math.round(canvasPoint[1])];
       }
       return null;
-    } catch (e) {
+    } catch {
       return undefined;
     }
   }
@@ -4505,7 +4480,9 @@ export class DrawingOverlay {
               );
             }
           }
-        } catch {}
+        } catch {
+          // a texture that can't be drawn (yet) is skipped this frame
+        }
         this.ctx.globalAlpha = savedAlpha;
       }
     }
@@ -4630,7 +4607,9 @@ export class DrawingOverlay {
               width: point.width,
             });
           }
-        } catch {}
+        } catch {
+          // a point that can't be projected is left out
+        }
       }
 
       if (projectedPoints.length >= 2) {
@@ -4757,15 +4736,11 @@ export class DrawingOverlay {
 
     // Clean up dying/finalizing stroke brushes
     for (const s of this.dyingStrokes) {
-      try {
-        s.brush.dispose();
-      } catch {}
+      s.brush.dispose();
     }
     this.dyingStrokes = [];
     for (const s of this.dyingPenStrokes) {
-      try {
-        s.pen.dispose();
-      } catch {}
+      s.pen.dispose();
     }
     this.dyingPenStrokes = [];
     this.finalizingStrokes = [];
@@ -4778,20 +4753,12 @@ export class DrawingOverlay {
 
     // Clean up RxJS subscriptions
     for (const sub of this._internalSubs) {
-      try {
-        sub.unsubscribe();
-      } catch {}
+      sub.unsubscribe();
     }
     this._internalSubs = [];
 
     // Remove viewer event listeners
-    if (this.viewer) {
-      for (const { event, handler } of this._boundViewerListeners) {
-        try {
-          this.viewer.off(event as any, handler);
-        } catch {}
-      }
-    }
+    for (const off of this._boundViewerListeners) off();
     this._boundViewerListeners = [];
 
     // Clean up texture canvases to free memory
@@ -4799,9 +4766,6 @@ export class DrawingOverlay {
       if (tex.canvas) {
         tex.canvas.width = 0;
         tex.canvas.height = 0;
-      }
-      if ((tex as any)._glGeometry) {
-        (tex as any)._glGeometry = null;
       }
     }
     this.markerTextures = [];

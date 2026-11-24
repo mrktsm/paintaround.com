@@ -248,15 +248,14 @@ function parseVerdict(text: string | undefined): Verdict | null {
   } catch { return null; }
 }
 
-// Gemini's schema dialect has no additionalProperties. It first says what people would call the drawing,
-// then decides: deciding first, it called a sketchy penis "a letter A" every time.
-const { additionalProperties: _, ...plainSchema } = VERDICT_SCHEMA;
+// It first says what people would call the drawing, then decides: deciding first, it settled on the
+// most innocent reading of sketchy drawings every time.
 const ANSWER_ORDER = ['looks_like', 'decision', 'category', 'confidence', 'reason'];
-const GEMINI_SCHEMA = {
-  ...plainSchema,
+const GEMINI_SCHEMA = { // (Gemini's schema dialect has no additionalProperties)
+  type: VERDICT_SCHEMA.type,
   properties: {
     looks_like: { type: 'array', items: { type: 'string' }, description: 'what different people walking past would say this drawing is: 3 short guesses, most likely first, including rude ones' },
-    ...plainSchema.properties,
+    ...VERDICT_SCHEMA.properties,
   },
   required: ANSWER_ORDER,
   propertyOrdering: ANSWER_ORDER,

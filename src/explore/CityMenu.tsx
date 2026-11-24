@@ -38,6 +38,7 @@ export default function CityMenu({
   // place under the anchor (coordinates relative to the page-root container)
   useLayoutEffect(() => {
     const a = anchor.getBoundingClientRect(), c = container.getBoundingClientRect();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- positions come from the DOM, before paint
     setPos({ left: a.left - c.left, top: a.bottom - c.top + 8 });
   }, [anchor, container]);
 

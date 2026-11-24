@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 import { renderPanoramaThumbnail } from '../shared/panoramaProjection.mjs';
 
-const headers = { 'User-Agent': 'IWasHere-PanoramaSampler/1.0 (local noncommercial prototype)' };
+const headers = { 'User-Agent': 'panorama-sampler/1.0' };
 const root = new URL('../', import.meta.url);
 const cache = new URL('research/panorama-pool/cache/', root);
 const output = new URL('public/panorama-pool/', root);

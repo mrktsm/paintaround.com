@@ -5,7 +5,7 @@ Picks the default test image plus N-1 spread-out curated locations.
 """
 import json, sys, os, urllib.request
 
-TOKEN = 'REMOVED'  # public client token already in the app
+TOKEN = os.environ["MAPILLARY_TOKEN"]
 HERE = os.path.dirname(os.path.abspath(__file__))
 out = sys.argv[1]
 n = int(sys.argv[2]) if len(sys.argv) > 2 else 5

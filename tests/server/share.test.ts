@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import sharp from 'sharp';
+import { placeNames } from '../../shared/placePath.ts';
 import { formatAt, parseAt } from '../../shared/shareView.ts';
 import { dab, relay, until } from './helpers.ts';
 
@@ -34,6 +35,15 @@ test('where someone looks survives the link; nonsense doesn\'t', () => {
   assert.deepEqual(parseAt(formatAt({ u: 0.12345, v: 0.6, zoom: 1.234 })), { u: 0.1235, v: 0.6, zoom: 1.23 });
   assert.equal(formatAt({ u: -0.25, v: 0.5, zoom: 0 }), '0.7500,0.5000,0.00');
   for (const bad of [null, '', '1', '0.5,0.5', '2,0.5,0', '0.5,0.5,9', '0.5,0.5,1,1', '"><script>', '0.5,-1,0', 'NaN,0,0', '0.5,0.5,1e9']) assert.equal(parseAt(bad), null, String(bad));
+});
+
+test('every place has its own address', () => {
+  const { items } = JSON.parse(readFileSync(new URL('../../shared/panorama-pool.json', import.meta.url), 'utf8'));
+  const names = placeNames(items);
+  assert.equal(new Set(names.values()).size, items.length);
+  for (const name of names.values()) assert.match(name, /^[a-z0-9-]+$/);
+  assert.equal(names.get('ph-piazza_san_marco'), 'piazza-san-marco');
+  assert.deepEqual([...placeNames([{ id: 'ph-terms', title: '' }, { id: 'a', title: 'Café Été' }, { id: 'b', title: 'Cafe ete' }]).values()], ['terms-2', 'cafe-ete', 'cafe-ete-2']);
 });
 
 test('a link\'s picture looks where the link says, and shows the drawings', async t => {
@@ -79,20 +89,22 @@ test('unknown places and too many pictures', async t => {
 test('the page tells chat apps about the place and its picture', async t => {
   const r = await relay({ PANO_DIR: await photos(), SITE_DIR: site() });
   t.after(r.stop);
-  const html = await (await r.get(`/view?imageId=${PLACE}&at=0.2500,0.5000,0.35`)).text();
+  const html = await (await r.get('/colosseum?at=0.2500,0.5000,0.35')).text();
   assert.match(html, /<title>Colosseum · paintaround\.com<\/title>/);
   assert.match(html, /og:title" content="Colosseum"/);
   assert.match(html, /og:image" content="http:\/\/test\.local\/api\/share\/ph-colosseum\.jpg\?v=0&#38;at=0\.2500,0\.5000,0\.35"/);
   assert.match(html, /rel="preload" as="image"[^>]*at=0\.2500,0\.5000,0\.35/);
+  assert.match(html, /og:url" content="http:\/\/test\.local\/colosseum\?at=0\.2500,0\.5000,0\.35"/);
+  assert.match(await (await r.get(`/view?imageId=${PLACE}`)).text(), /og:title" content="Colosseum"/); // links from before
   // nothing from the link itself gets into the page
-  const evil = await (await r.get(`/view?imageId=${PLACE}&at=${encodeURIComponent('"><script>alert(1)</script>')}`)).text();
+  const evil = await (await r.get(`/colosseum?at=${encodeURIComponent('"><script>alert(1)</script>')}`)).text();
   assert.ok(!evil.includes('script>alert') && evil.includes('og:title" content="Colosseum"'));
-  const unknown = await (await r.get('/view?imageId=%3Cscript%3E')).text();
+  const unknown = await (await r.get('/nowhere')).text();
   assert.ok(unknown.includes('<title>paintaround.com</title>') && !unknown.includes('<script>'));
 });
 
 test('without the site there, the page says so (the web server then sends the plain one)', async t => {
   const r = await relay({ PANO_DIR: await photos(), SITE_DIR: '/nowhere' });
   t.after(r.stop);
-  assert.equal((await r.get(`/view?imageId=${PLACE}`)).status, 503);
+  assert.equal((await r.get('/colosseum')).status, 503);
 });

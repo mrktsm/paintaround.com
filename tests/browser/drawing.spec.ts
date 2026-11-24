@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { changed, drag, look, middle, needsPlace, pick, visit, PLACE } from './helpers';
+import { changed, drag, look, middle, needsPlace, pick, visit } from './helpers';
 
 needsPlace();
 
@@ -82,8 +82,8 @@ test('the colour is remembered, and closing goes back to the place on the map', 
   await p.fill('.color-picker-swatch input', '#00aa55');
   await expect.poll(() => p.evaluate(() => localStorage.getItem('markerColor')?.toLowerCase())).toBe('#00aa55');
   await p.click('.view-close');
-  await expect(p).toHaveURL(new RegExp(`imageId=${PLACE}`));
-  expect(new URL(p.url()).searchParams.get('lng')).toBeTruthy();
+  await expect(p).toHaveURL(/\/$/);
+  await expect(p.locator('.ex-city__btn')).toContainText('Rome');
   expect(p.problems).toEqual([]);
 });
 
@@ -96,7 +96,7 @@ test('a first-time visitor is shown how to look around, until they do', async ({
 });
 
 test('an unknown place says so', async ({ browser }) => {
-  const p = await visit(browser, { alone: true, path: '/view?imageId=nope' });
+  const p = await visit(browser, { alone: true, path: '/nope' });
   await expect(p.getByText('Explore places to draw')).toBeVisible();
 });
 

@@ -27,12 +27,13 @@ test('a shared link opens looking at the same spot, with the drawings', async ({
   await drag(a, [560, 620], [840, 620]);
   await a.waitForTimeout(1500);
   const link = await sharedLink(a);
-  expect(link).toMatch(new RegExp(`/view\\?imageId=${PLACE}&at=[\\d.]+,[\\d.]+,[\\d.]+$`));
+  expect(link).toMatch(/\/colosseum\?at=[\d.]+,[\d.]+,[\d.]+$/);
   await expect(a.locator('.view-copied')).toHaveCount(0, { timeout: 4000 });
   const mine = await look(a, [], whole);
 
   const b = await opens(browser, link);
   await expect(b.locator('.viewer-container.loaded')).toBeVisible({ timeout: 20_000 });
+  await expect(b).toHaveURL(/\/colosseum$/); // the address stays simple
   await b.waitForTimeout(2500);
   const theirs = await look(b, [a], whole);
   expect(await changed(mine, theirs)).toBeLessThan(12_000); // of a million: undo is lit for a, not b; edges
@@ -85,7 +86,7 @@ test('where there is a share sheet it opens, with the link; closing it is fine',
     Object.defineProperty(navigator, 'share', { configurable: true, value: async (d: { url: string }) => { w.__shared.push(d.url); if (w.__fail) throw new DOMException('no', w.__fail); } });
   });
   await p.click('.view-share');
-  await expect.poll(() => p.evaluate(() => (window as unknown as { __shared: string[] }).__shared[0])).toMatch(new RegExp(`/view\\?imageId=${PLACE}&at=`));
+  await expect.poll(() => p.evaluate(() => (window as unknown as { __shared: string[] }).__shared[0])).toMatch(/\/colosseum\?at=/);
   await p.evaluate(() => { (window as unknown as { __fail: string }).__fail = 'AbortError'; });
   await p.click('.view-share');
   await p.waitForTimeout(400);
@@ -110,9 +111,16 @@ test('when its picture can\'t be made, the link still opens', async ({ browser }
 });
 
 test('a link with nonsense in it opens the place as usual', async ({ browser }) => {
-  const p = await visit(browser, { alone: true, path: `/view?imageId=${PLACE}&at=what` });
+  const p = await visit(browser, { alone: true, path: '/colosseum?at=what' });
   await expect(p.locator('.viewer-container.loaded')).toBeVisible({ timeout: 20_000 });
   await p.click('.view-close');
-  await expect(p).toHaveURL(new RegExp(`imageId=${PLACE}`));
+  await expect(p).toHaveURL(/\/$/);
+  expect(p.problems).toEqual([]);
+});
+
+test('links from before still open their place', async ({ browser }) => {
+  const p = await visit(browser, { alone: true, path: `/view?imageId=${PLACE}&lng=12.4&lat=41.8` });
+  await expect(p).toHaveURL(/\/colosseum$/);
+  await expect(p.locator('.viewer-container.loaded')).toBeVisible({ timeout: 20_000 });
   expect(p.problems).toEqual([]);
 });

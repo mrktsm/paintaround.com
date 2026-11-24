@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import sharp from 'sharp';
+import { placeNames } from '../shared/placePath.ts';
 import { projectRaw, thumbnailViewFor } from '../shared/panoramaProjection.mjs';
 import { formatAt, shareCamera, type LookingAt } from '../shared/shareView.ts';
 import { START_ZOOM } from '../shared/startView.ts';
@@ -16,6 +17,10 @@ const places = new Map<string, Place>(
   (JSON.parse(readFileSync(new URL('../shared/panorama-pool.json', import.meta.url), 'utf8')) as { items: Place[] }).items.map(p => [p.id, p]),
 );
 export const isPlace = (id: string) => places.has(id);
+const names = placeNames([...places.values()]);
+const ids = new Map([...names].map(([id, name]) => [name, id]));
+/** The place at an address (/colosseum), if there is one. */
+export const placeNamed = (name: string) => ids.get(name) ?? '';
 
 /** The built site (its index.html is the page). */
 const SITE_DIR = process.env.SITE_DIR ?? new URL('../dist/', import.meta.url).pathname;
@@ -92,14 +97,13 @@ export async function placePage(id: string, at: LookingAt | null, changed: numbe
   const place = places.get(id);
   if (!place) return html;
   const where = place.location === 'Location not recorded' ? '' : `${place.location.replace(/^Near /, '').replace(/, Location recorded$/, '')}. `;
-  const view = at ? `&at=${formatAt(at)}` : '';
-  const picture = `${origin}/api/share/${id}.jpg?v=${changed}${view}`;
+  const picture = `${origin}/api/share/${id}.jpg?v=${changed}${at ? `&at=${formatAt(at)}` : ''}`;
   const set = (name: string, content: string) => {
     html = html.replace(new RegExp(`(<meta (?:property|name)="${name}" content=")[^"]*`), (_, start: string) => start + escape(content));
   };
   for (const name of ['og:title', 'twitter:title']) set(name, place.title);
   for (const name of ['og:description', 'twitter:description', 'description']) set(name, `${where}Draw on it, live with other people.`);
-  set('og:url', `${origin}/view?imageId=${id}${view}`);
+  set('og:url', `${origin}/${names.get(id)}${at ? `?at=${formatAt(at)}` : ''}`);
   return html.replace('<title>paintaround.com</title>', `<title>${escape(place.title)} · paintaround.com</title>`).replace('</head>', () => [
     `<meta property="og:image" content="${escape(picture)}" />`,
     '<meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />',

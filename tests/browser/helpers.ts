@@ -47,7 +47,7 @@ export async function visit(browser: Browser, options: BrowserContextOptions & {
   let on3D = false;
   page.on('console', m => { if (m.text().includes('3D surface painting ON')) on3D = true; });
   if (!firstTime) await page.addInitScript(() => { localStorage.setItem('tutorialSeen', '1'); localStorage.setItem('markerColor', '#FF00FF'); });
-  await page.goto(path ?? `/view?imageId=${PLACE}`);
+  await page.goto(path ?? `/${PLACE.replace(/^ph-/, '').replaceAll('_', '-')}`);
   if (!path) {
     await expect(page.locator('.viewer-container.loaded')).toBeVisible({ timeout: 20_000 });
     if (!flat) await expect.poll(() => on3D, { message: 'strokes are drawn onto surfaces', timeout: 20_000 }).toBe(true);

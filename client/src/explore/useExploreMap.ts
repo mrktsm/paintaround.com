@@ -9,6 +9,8 @@ import { heatmapRadius, PHOTO_ZOOM, SPOTS, spotsHeatmapLayer } from './spotsHeat
 
 interface Options {
   city: string;
+  /** The place you came back from: the map opens there. */
+  from?: string;
   onOpen(place: MapLocation): void;
   /** You moved the map to another city. False: the panel stays where it is. */
   onCity(city: string): boolean;
@@ -60,16 +62,14 @@ export function useExploreMap(container: RefObject<HTMLDivElement | null>, optio
 
   useEffect(() => {
     if (!container.current) return;
-    // coming back from a place: return to where you were (?lng=&lat=&zoom=)
-    const q = new URLSearchParams(location.search);
-    const lng = parseFloat(q.get('lng') ?? ''), lat = parseFloat(q.get('lat') ?? '');
-    const back: [number, number] | null = isFinite(lng) && isFinite(lat) ? [lng, lat] : null;
+    const from = MAP_LOCATIONS.find(l => l.id === latest.current.from);
+    const back: [number, number] | null = from ? [from.lng, from.lat] : null;
     const center = back ?? middleOf(placesIn(latest.current.city)) ?? [-73.98, 40.72];
     const m = new maplibregl.Map({
       container: container.current,
       style: MAP_STYLE,
       center,
-      zoom: back ? Math.max(3, parseFloat(q.get('zoom') ?? '') || 15) : 12.5,
+      zoom: back ? 15 : 12.5,
       attributionControl: false,
       fadeDuration: 0, // tiles and labels right away instead of a 300ms fade
       maxTileCacheSize: 800, // keep more tiles around so zooming back is instant

@@ -10,7 +10,7 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { drawingsChanged, getPreview, previewManifest, schedulePreview } from './previews.ts';
-import { isPlace, placePage, sharePicture } from './share.ts';
+import { isPlace, placeNamed, placePage, sharePicture } from './share.ts';
 import { PaintLayer } from './layer.ts';
 import { alertFlagged } from './alerts.ts';
 import { LOG_ONLY, MODERATION_ON, moderate, splitDrawings, type Verdict } from './moderation.ts';
@@ -378,7 +378,7 @@ setInterval(() => { for (const room of rooms.values()) void flatten(room); }, Ma
 //   GET /api/previews/<id>/card|loading -> the JPEG
 //   GET /api/layer/<room>/<x_y>         -> a paint-layer tile (WebP)
 //   GET /api/share/<id>.jpg?at=u,v,zoom -> a shared link's picture
-//   GET /view?imageId=<id>&at=u,v,zoom  -> the site's page, telling chat apps about that picture
+//   GET /<place>?at=u,v,zoom            -> the site's page, telling chat apps about that picture
 const http = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const cors = { 'access-control-allow-origin': '*' };
@@ -426,8 +426,8 @@ const http = createServer((req, res) => {
     });
     return;
   }
-  if (url.pathname === '/view') {
-    const id = url.searchParams.get('imageId') ?? '', origin = `https://${req.headers.host}`;
+  if (/^\/[\w-]{1,80}$/.test(url.pathname)) {
+    const id = url.pathname === '/view' ? url.searchParams.get('imageId') ?? '' : placeNamed(url.pathname.slice(1)), origin = `https://${req.headers.host}`;
     void placePage(id, parseAt(url.searchParams.get('at')), drawingsChanged(id), ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0]).then(html => {
       if (html) res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }).end(html);
       else res.writeHead(503).end(); // the web server sends the plain page instead

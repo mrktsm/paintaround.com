@@ -1,3 +1,4 @@
+import { placeNames } from '../../../shared/placePath';
 import { drawnPreviewUrl } from './drawnPreviews';
 import data from '../../../shared/panorama-pool.json';
 
@@ -48,17 +49,16 @@ export const MAP_LOCATIONS: MapLocation[] = PANORAMAS.filter(hasCoordinates).map
     tier: index < 36 ? 1 : index < 90 ? 2 : 3 };
 });
 
-/** Coordinates come from the catalog, never untrusted/stale links or a guessed city center. */
-export function panoramaViewUrl(id: string) {
-  const panorama = PANORAMA_BY_ID.get(id);
-  if (!panorama) return '/';
-  const params = new URLSearchParams({ imageId: panorama.id });
-  if (hasCoordinates(panorama)) {
-    params.set('lng', String(panorama.longitude));
-    params.set('lat', String(panorama.latitude));
-  }
-  return `/view?${params}`;
+const NAMES = placeNames(PANORAMAS);
+const BY_NAME = new Map(PANORAMAS.map(panorama => [NAMES.get(panorama.id)!, panorama]));
+
+/** A place's address (/colosseum). */
+export function placePath(id: string): string {
+  const name = NAMES.get(id);
+  return name ? `/${name}` : '/';
 }
+
+export const placeByName = (name: string): Panorama | undefined => BY_NAME.get(name);
 
 export function panoramaThumbnail(id: string, full = false): string | null {
   const panorama = PANORAMA_BY_ID.get(id);

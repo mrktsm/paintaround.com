@@ -13,8 +13,13 @@ example.com {
 	handle /ws {
 		reverse_proxy 127.0.0.1:8787
 	}
-	# places: the page with the title and picture for chat apps (the plain page if that fails)
-	handle /view {
+	# places (/colosseum): the page with the title and picture for chat apps; the plain page if that fails
+	@place {
+		path_regexp ^/[\w-]+$
+		not path /explore /privacy /terms
+		not file
+	}
+	handle @place {
 		reverse_proxy 127.0.0.1:8787 {
 			@failed status 5xx
 			handle_response @failed {
@@ -24,8 +29,8 @@ example.com {
 		}
 	}
 	handle_errors {
-		@view path /view
-		handle @view {
+		@page path_regexp ^/[\w-]+$
+		handle @page {
 			rewrite * /index.html
 			file_server {
 				status 200

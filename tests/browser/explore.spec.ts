@@ -27,7 +27,7 @@ test('tapping a photo circle opens that place', async ({ browser }) => {
   })?.dataset.place);
   expect(id).toBeTruthy();
   await p.locator(`.ex-pin[data-place="${id}"] .ex-pin__photo`).click();
-  await expect(p).toHaveURL(new RegExp(`/view\\?imageId=${id}`));
+  await expect(p).toHaveURL(new RegExp(`/${id!.replace(/^ph-/, '').replaceAll('_', '-')}$`));
 });
 
 test('picking a city flies there and shows its places', async ({ browser }) => {
@@ -83,7 +83,7 @@ test('searching finds places, opens them and remembers them', async ({ browser }
   await expect(p.locator('.ex-search-empty')).toContainText('No Places Found');
   await p.fill('input[aria-label="Search places"]', 'colos');
   await p.locator('.ex-search-result').first().click();
-  await expect(p).toHaveURL(/\/view\?imageId=/);
+  await expect(p).toHaveURL(/\/colosseum$/);
   await expect(p.locator('.viewer-container')).toBeVisible();
   await p.goto('/');
   await p.click('.ex-tile[aria-label="Search"]');
@@ -94,12 +94,17 @@ test('searching finds places, opens them and remembers them', async ({ browser }
   await p.keyboard.press('Escape');
 });
 
-test('coming back from a place shows the map where it is', async ({ browser }) => {
-  const p = await explore(browser, '/?lng=12.4922&lat=41.8902&imageId=ph-colosseum');
-  const c = await middle(p);
-  expect(far(c, { lng: 12.4922, lat: 41.8902 })).toBeLessThan(0.02);
+test('coming back from a place shows the map where it is, and the address is the plain one', async ({ browser }) => {
+  const p = await (await browser.newContext()).newPage();
+  pages.push(p);
+  await p.addInitScript(() => localStorage.setItem('tutorialSeen', '1'));
+  await p.goto('/quattro-canti');
+  await p.locator('.view-close').click();
+  await expect(p.locator('.ex-pin.is-shown').first()).toBeVisible({ timeout: 20_000 });
+  expect(new URL(p.url()).pathname + new URL(p.url()).search).toBe('/');
+  expect(far(await middle(p), { lng: 13.3615, lat: 38.1157 })).toBeLessThan(0.02);
   expect(await p.evaluate(() => window.__map.getZoom())).toBe(15);
-  await expect(p.locator('.ex-city__btn')).toContainText('Rome');
+  await expect(p.locator('.ex-city__btn')).toContainText('Palermo');
 });
 
 test('on a phone: the sheet, search and the city list', async ({ browser }) => {
@@ -133,7 +138,7 @@ test('on a phone: coming back from a place, nothing is under the search bar, not
       requestAnimationFrame(frame);
     })();
   });
-  await p.goto('/view?imageId=ph-colosseum');
+  await p.goto('/colosseum');
   await expect(p.locator('.viewer-container.loaded')).toBeVisible({ timeout: 20_000 });
   await p.locator('.view-close').tap();
   await expect(p.locator('.ex-recent')).toHaveCount(1);

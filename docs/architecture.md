@@ -60,8 +60,8 @@ strokes of the least recently used rooms go.
 
 ## Sharing
 
-A shared link says where to look: `/view?imageId=<id>&at=<u>,<v>,<zoom>` (`shared/shareView.ts`). The drawing
-server (`server/share.ts`) answers `/view` with the site's page plus the place's title and picture for chat
+A shared link says where to look: `/colosseum?at=<u>,<v>,<zoom>` (`shared/placePath.ts`,
+`shared/shareView.ts`). The drawing server (`server/share.ts`) answers with the site's page plus the place's title and picture for chat
 apps, and renders that picture on demand from the photo and the moderated drawings. The place then opens with
 the same picture as its loading frame. Nothing is stored; the latest pictures are cached in memory, and there
 is a limit per minute.
@@ -80,8 +80,8 @@ curl -X POST localhost:8787/internal/restore/<id>
 
 ## Deploying
 
-`scripts/deploy.sh` copies the site to a server where Caddy serves it and passes `/ws`, `/api` and `/view` to
-the drawing server ([docs/Caddyfile](Caddyfile)). `.github/workflows/deploy.yml` does that for pushes to `main`, once the variables
+`scripts/deploy.sh` copies the site to a server where Caddy serves it and passes `/ws`, `/api` and the
+places' addresses to the drawing server ([docs/Caddyfile](Caddyfile)). `.github/workflows/deploy.yml` does that for pushes to `main`, once the variables
 listed at its top are set. The drawing server restarts only if its code changed, since that clears the
 drawings.
 

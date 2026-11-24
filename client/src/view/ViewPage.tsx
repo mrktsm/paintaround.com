@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import 'mapillary-js/dist/mapillary.css';
 import './view.css';
 import { parseAt, type LookingAt } from '../../../shared/shareView';
 import type { DrawingOverlay } from '../drawing/DrawingOverlay';
-import { DEFAULT_PANORAMA, hasCoordinates, PANORAMA_BY_ID, type Panorama } from '../pool/catalog';
+import { DEFAULT_PANORAMA, PANORAMA_BY_ID, placeByName, placePath, type Panorama } from '../pool/catalog';
 import { showOwnDrawing } from '../pool/localPreview';
 import { recordVisit } from '../pool/visited';
 import { DARK_UI } from '../theme';
@@ -43,14 +43,7 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
       overlay.current.leaveRealtime();
       void overlay.current.fadeOut();
     }
-    // the map reopens where this place is
-    const back = new URLSearchParams();
-    if (hasCoordinates(panorama)) {
-      back.set('lng', String(panorama.longitude));
-      back.set('lat', String(panorama.latitude));
-      back.set('imageId', panorama.id);
-    }
-    navigate(`/?${back}`);
+    navigate('/', { state: { from: panorama.id } }); // the map reopens where this place is
   };
 
   return (
@@ -94,12 +87,22 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
 }
 
 export default function ViewPage() {
+  const { place = '' } = useParams();
   const [params] = useSearchParams();
-  const panorama = PANORAMA_BY_ID.get(params.get('imageId') || DEFAULT_PANORAMA.id);
+  const panorama = placeByName(place);
   const id = panorama?.id;
   const link = params.get('at');
   const at = useMemo(() => parseAt(link), [link]);
   useEffect(() => { if (id) recordVisit(id); }, [id]);
+  // the address stays simple: where a shared link looks was only needed to open it
+  useEffect(() => { if (id && link !== null) window.history.replaceState(window.history.state, '', placePath(id)); }, [id, link]);
   if (!panorama) return <div className="panorama-unavailable"><h1>This place isn’t in the current collection.</h1><Link to="/">Explore places to draw</Link></div>;
   return <View key={`${panorama.id} ${link}`} panorama={panorama} at={at} />;
+}
+
+/** Addresses from before (/view?imageId=ph-colosseum). */
+export function OldViewLink() {
+  const [params] = useSearchParams();
+  const id = params.get('imageId') || DEFAULT_PANORAMA.id, at = params.get('at');
+  return <Navigate replace to={PANORAMA_BY_ID.has(id) ? `${placePath(id)}${at ? `?at=${encodeURIComponent(at)}` : ''}` : `/${encodeURIComponent(id)}`} />;
 }

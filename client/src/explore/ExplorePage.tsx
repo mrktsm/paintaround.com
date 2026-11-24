@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MAP_LOCATIONS, panoramaViewUrl } from '../pool/catalog';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { MAP_LOCATIONS, placePath } from '../pool/catalog';
 import { onDrawnPreviewsChange, refreshDrawnPreviews } from '../pool/drawnPreviews';
 import { prefetchPanorama } from '../pool/panoramaImages';
 import { readVisited } from '../pool/visited';
@@ -17,9 +17,8 @@ import { useIsPhone } from './useIsPhone';
 import { useSearch } from './useSearch';
 import './explore.css';
 
-function firstCity(): string {
-  const id = new URLSearchParams(location.search).get('imageId');
-  return MAP_LOCATIONS.find(l => l.id === id)?.city || CITIES.find(c => c.startsWith('Rome')) || CITIES[0];
+function firstCity(from: string | undefined): string {
+  return MAP_LOCATIONS.find(l => l.id === from)?.city || CITIES.find(c => c.startsWith('Rome')) || CITIES[0];
 }
 
 /** Places with drawings show them in their photos: ask which ones now, then every 30 s. */
@@ -46,7 +45,9 @@ export default function ExplorePage() {
   const side = useRef<HTMLDivElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const panelBody = useRef<HTMLDivElement>(null);
-  const [city, setCity] = useState(firstCity);
+  /** The place you came back from. */
+  const { from } = (useLocation().state ?? {}) as { from?: string };
+  const [city, setCity] = useState(() => firstCity(from));
   const [panelOpen, setPanelOpen] = useState(true);
   const [detent, setDetent] = useState<Detent>('half');
   const sheet = useRef({ height: 0, dragging: false });
@@ -66,7 +67,7 @@ export default function ExplorePage() {
 
   const open = useCallback(({ id }: { id: string }) => {
     prefetchPanorama(id);
-    navigate(panoramaViewUrl(id));
+    navigate(placePath(id));
   }, [navigate]);
 
   // the panel's list fades out and the new one in right away; photos fill in as they load
@@ -94,6 +95,7 @@ export default function ExplorePage() {
 
   const { map, bearing } = useExploreMap(mapEl, {
     city,
+    from,
     onOpen: open,
     onCity: followCity,
     offset: () => phone

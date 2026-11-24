@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { changed, drag, look, needsPlace, pick, visit, PLACE } from './helpers';
+import { changed, drag, look, middle, needsPlace, pick, visit, PLACE } from './helpers';
 
 needsPlace();
 
-for (const tool of ['pencil', 'marker', 'crayon', 'fountainPen', 'watercolor']) {
-  test(`${tool} paints, undo removes it, redo brings it back`, async ({ browser }) => {
-    const p = await visit(browser, { alone: true });
+for (const flat of [false, true]) for (const tool of ['pencil', 'marker', 'crayon', 'fountainPen', 'watercolor']) {
+  test(`${tool} paints${flat ? ' without 3D data' : ''}, undo removes it, redo brings it back`, async ({ browser }) => {
+    const p = await visit(browser, { alone: true, flat });
     await pick(p, tool);
     const before = await look(p);
     await drag(p, [520, 620], [880, 620]);
@@ -26,14 +26,40 @@ test('paint lands under the pointer', async ({ browser }) => {
   await pick(p, 'marker');
   const before = await look(p);
   await drag(p, [640, 600], [760, 600]);
-  const after = await look(p);
-  const { default: sharp } = await import('sharp');
-  const [a, b] = await Promise.all([before, after].map(x => sharp(x).removeAlpha().raw().toBuffer()));
-  let x = 0, y = 0, n = 0;
-  for (let i = 0; i < a.length; i += 3) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 90) { x += (i / 3) % 850; y += Math.floor(i / 3 / 850); n++; }
-  expect(Math.abs(300 + x / n - 700)).toBeLessThan(15);
-  expect(Math.abs(380 + y / n - 600)).toBeLessThan(15);
+  const at = await middle(before, await look(p));
+  expect(Math.abs(at.x - 700)).toBeLessThan(15);
+  expect(Math.abs(at.y - 600)).toBeLessThan(15);
 });
+
+for (const flat of [false, true]) {
+  test(`paint turns with the scene${flat ? ' without 3D data' : ''}`, async ({ browser }) => {
+    const clean = await visit(browser, { alone: true, flat }), p = await visit(browser, { alone: true, flat });
+    await pick(p, 'marker');
+    await drag(p, [700, 600], [800, 600]);
+    // the place turned the same way, with and without paint
+    const turn = async (page: typeof p) => { await drag(page, [700, 460], [560, 460], { button: 'right' }); return look(page); };
+    const [before, after] = [await look(clean), await look(p)], [beforeTurned, afterTurned] = [await turn(clean), await turn(p)];
+    const at = await middle(before, after), turned = await middle(beforeTurned, afterTurned);
+    expect(Math.abs(at.x - 750)).toBeLessThan(20);
+    expect(at.x - turned.x).toBeGreaterThan(60);
+    expect(Math.abs(turned.n - at.n) / at.n).toBeLessThan(0.35); // all of it, where it belongs
+    expect(p.problems).toEqual([]);
+  });
+
+  test(`a tap leaves nothing half drawn${flat ? ' without 3D data' : ''}`, async ({ browser }) => {
+    const p = await visit(browser, { alone: true, flat });
+    await pick(p, 'marker');
+    const before = await look(p);
+    await p.mouse.click(700, 600);
+    await p.mouse.click(740, 600);
+    await p.waitForTimeout(500);
+    await drag(p, [520, 660], [700, 660]);
+    await p.click('[aria-label="Undo"]');
+    await p.waitForTimeout(900);
+    expect(await changed(before, await look(p))).toBeLessThan(700); // at most two dots
+    expect(p.problems).toEqual([]);
+  });
+}
 
 test('the eraser rubs out paint, and undo puts it back', async ({ browser }) => {
   const p = await visit(browser, { alone: true });

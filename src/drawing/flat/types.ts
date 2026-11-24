@@ -14,3 +14,14 @@ export interface SplashParticle {
   color: string;
   strokeId?: string;
 }
+
+/** A brush that draws on screen; it follows the pointer by being drawn at it every frame. */
+export interface FlatTool {
+  setSeed(seed: number): void;
+  initialize(): Promise<void>;
+  startStroke(id: string): void | Promise<void>;
+  updateColor(color: string): void;
+  render(ctx: CanvasRenderingContext2D, x: number, y: number, fov: number): Promise<void>;
+  getBounds(): { minX: number; minY: number; maxX: number; maxY: number };
+  dispose(): void;
+}

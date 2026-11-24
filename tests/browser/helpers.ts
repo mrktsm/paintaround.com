@@ -21,13 +21,26 @@ const AREA = { x: 300, y: 380, width: 850, height: 340 };
 export type Visitor = Page & { problems: string[] };
 
 /** Someone who opens a place and waits until they can draw. */
-export async function visit(browser: Browser, options: BrowserContextOptions & { firstTime?: boolean; path?: string; alone?: boolean; flat?: boolean } = {}): Promise<Visitor> {
-  const { firstTime, path, alone, flat, ...context } = options;
+export async function visit(browser: Browser, options: BrowserContextOptions & { firstTime?: boolean; path?: string; alone?: boolean; flat?: boolean; relay?: number } = {}): Promise<Visitor> {
+  const { firstTime, path, alone, flat, relay, ...context } = options;
   const page = await (await browser.newContext(context)).newPage() as Visitor;
   page.problems = [];
   open.push(page);
   // alone: no drawing server, so other tests' drawings aren't here
   if (alone) await page.routeWebSocket(/\/ws$/, () => {});
+  // relay: another drawing server's port
+  if (relay) {
+    await page.addInitScript(port => {
+      const Socket = window.WebSocket;
+      window.WebSocket = class extends Socket {
+        constructor(url: string | URL, protocols?: string | string[]) { super(String(url).endsWith('/ws') ? `ws://127.0.0.1:${port}/ws` : url, protocols); }
+      };
+    }, relay);
+    await page.route('**/api/**', async route => {
+      const url = new URL(route.request().url());
+      await route.fulfill({ response: await route.fetch({ url: `http://127.0.0.1:${relay}${url.pathname}${url.search}` }) });
+    });
+  }
   // flat: a place without 3D data
   if (flat) await page.route('**/deep-layers/**', route => route.fulfill({ status: 404 }));
   page.on('pageerror', e => page.problems.push(e.message));
@@ -56,6 +69,18 @@ export async function changed(a: Buffer, b: Buffer): Promise<number> {
   let n = 0;
   for (let i = 0; i < x.length; i += 3) if (Math.abs(x[i] - y[i]) + Math.abs(x[i + 1] - y[i + 1]) + Math.abs(x[i + 2] - y[i + 2]) > 60) n++;
   return n;
+}
+
+/** Where on screen two pictures differ (the middle of it), and how much. */
+export async function middle(a: Buffer, b: Buffer): Promise<{ x: number; y: number; n: number }> {
+  const [p, q] = await Promise.all([a, b].map(i => sharp(i).removeAlpha().raw().toBuffer()));
+  let x = 0, y = 0, n = 0;
+  for (let i = 0; i < p.length; i += 3) if (Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]) > 90) {
+    x += (i / 3) % AREA.width;
+    y += Math.floor(i / 3 / AREA.width);
+    n++;
+  }
+  return { x: AREA.x + x / n, y: AREA.y + y / n, n };
 }
 
 export async function pick(page: Page, tool: string): Promise<void> {

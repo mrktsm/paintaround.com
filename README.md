@@ -1,6 +1,6 @@
-# paintaround
+# paintaround.com
 
-Draw on the world's walls, together. [paintaround.com](https://paintaround.com) is a map of 360° photos
+Draw on the world’s walls, together. [paintaround.com](https://paintaround.com) is a map of 360° photos
 you can step into and paint on. Everyone in a place sees everyone else's strokes as they're drawn.
 
 ![Drawing in front of the Colosseum](docs/screenshot.jpg)

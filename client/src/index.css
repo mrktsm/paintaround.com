@@ -11,3 +11,8 @@
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
 }
+/* the text in buttons (the compass's N, Done, ...) isn't there to be selected */
+button {
+  -webkit-user-select: none;
+  user-select: none;
+}

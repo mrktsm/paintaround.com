@@ -172,3 +172,13 @@ test('on a phone: the credits move with the sheet, not after it', async ({ brows
   expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(100); // it did move
   expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(3);
 });
+
+test('the text in buttons can\'t be selected', async ({ browser }) => {
+  const p = await explore(browser);
+  const n = p.locator('[aria-label="Face north"] text');
+  await expect(n).toHaveText('N');
+  const box = (await n.boundingBox())!;
+  await p.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+  await p.keyboard.press('ControlOrMeta+a');
+  expect(await p.evaluate(() => getSelection()!.toString())).not.toMatch(/^N$/m);
+});

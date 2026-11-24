@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import sharp from 'sharp';
 import { placeNames } from '../../shared/placePath.ts';
 import { formatAt, parseAt } from '../../shared/shareView.ts';
-import { dab, relay, until } from './helpers.ts';
+import { dab, fakeGemini, relay, until, wait } from './helpers.ts';
 
 const PLACE = 'ph-colosseum'; // in the catalog
 /** A folder with a panorama: grey, with a white wall around u = 0.25. */
@@ -73,6 +73,57 @@ test('drawings waiting for moderation aren\'t in the picture', async t => {
   assert.ok((await colour(await picture(r, '0.7545,0.5090,0.35')))[0] > 100);
 });
 
+test('sharing checks what was just drawn, so it\'s in the picture', async t => {
+  const gemini = await fakeGemini();
+  const r = await relay({ PANO_DIR: await photos(), GEMINI_API_KEY: 'x', GEMINI_URL: gemini.url, MODERATION: 'on', MODERATION_QUIET_MS: '60000', MODERATION_MAX_WAIT_MS: '60000', SHARE_WAIT_MS: '4000' });
+  t.after(async () => { await r.stop(); gemini.close(); });
+  const at = '0.7545,0.5090,0.35', isBlue = async (extra: string) => { const [red, , blue] = await colour(await picture(r, at + extra)); return blue > 200 && red < 90; };
+  const a = await r.person(PLACE), b = await r.person(PLACE);
+  a.draw(await dab(0.735, 0.47, '#0000ff', 160));
+  await wait(400);
+  // opening the place doesn't wait for a check, or cause one
+  const started = Date.now();
+  assert.equal(await isBlue(''), false);
+  assert.ok(Date.now() - started < 1500);
+  assert.equal(gemini.calls.length, 0);
+  // a chat app asking for the picture does
+  assert.equal(await isBlue('&v=1'), true);
+  assert.equal(gemini.calls.length, 1);
+  assert.equal(await isBlue(''), true, 'and then it\'s checked for good');
+  // again at once: no more checks
+  a.draw(await dab(0.2, 0.2, '#0000ff', 160));
+  await wait(300);
+  await picture(r, `${at}&v=2`);
+  assert.equal(gemini.calls.length, 1);
+  assert.equal(b.seen.size, 2);
+});
+
+test('bad drawings shared right away are taken down, not into the picture', async t => {
+  const gemini = await fakeGemini();
+  const r = await relay({ PANO_DIR: await photos(), GEMINI_API_KEY: 'x', GEMINI_URL: gemini.url, MODERATION: 'on', MODERATION_QUIET_MS: '60000', MODERATION_MAX_WAIT_MS: '60000' });
+  t.after(async () => { await r.stop(); gemini.close(); });
+  const a = await r.person(PLACE), b = await r.person(PLACE), bad = await dab(0.735, 0.47, '#ff0000', 160);
+  a.draw(bad);
+  await until('b sees it', () => b.seen.has(bad.id));
+  const [red, green] = await colour(await picture(r, '0.7545,0.5090,0.35&v=1'));
+  assert.ok(Math.abs(red - green) < 40, 'grey, not red');
+  await until('it\'s taken down', () => !b.seen.has(bad.id));
+});
+
+test('a slow check doesn\'t hold the picture up for long, and its result still counts', async t => {
+  const gemini = await fakeGemini();
+  gemini.slowMs = 2500;
+  const r = await relay({ PANO_DIR: await photos(), GEMINI_API_KEY: 'x', GEMINI_URL: gemini.url, MODERATION: 'on', MODERATION_QUIET_MS: '60000', MODERATION_MAX_WAIT_MS: '60000', SHARE_WAIT_MS: '700' });
+  t.after(async () => { await r.stop(); gemini.close(); });
+  const a = await r.person(PLACE);
+  a.draw(await dab(0.735, 0.47, '#0000ff', 160));
+  await wait(400);
+  const started = Date.now(), blue = async () => (await colour(await picture(r, '0.7545,0.5090,0.35&v=1')))[2] > 200;
+  assert.equal(await blue(), false);
+  assert.ok(Date.now() - started < 2000);
+  await until('it\'s there once checked', blue);
+});
+
 test('unknown places and too many pictures', async t => {
   const r = await relay({ PANO_DIR: await photos(), SHARE_MAX_PER_MINUTE: '2' });
   t.after(r.stop);
@@ -92,7 +143,7 @@ test('the page tells chat apps about the place and its picture', async t => {
   const html = await (await r.get('/colosseum?at=0.2500,0.5000,0.35')).text();
   assert.match(html, /<title>Colosseum · paintaround\.com<\/title>/);
   assert.match(html, /og:title" content="Colosseum"/);
-  assert.match(html, /og:image" content="http:\/\/test\.local\/api\/share\/ph-colosseum\.jpg\?v=0&#38;at=0\.2500,0\.5000,0\.35"/);
+  assert.match(html, /og:image" content="http:\/\/test\.local\/api\/share\/ph-colosseum\.jpg\?v=0&amp;at=0\.2500,0\.5000,0\.35"/);
   assert.match(html, /rel="preload" as="image"[^>]*at=0\.2500,0\.5000,0\.35/);
   assert.match(html, /og:url" content="http:\/\/test\.local\/colosseum\?at=0\.2500,0\.5000,0\.35"/);
   assert.match(await (await r.get(`/view?imageId=${PLACE}`)).text(), /og:title" content="Colosseum"/); // links from before

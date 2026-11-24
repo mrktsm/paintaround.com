@@ -41,10 +41,11 @@ const listen = (handler: Parameters<typeof createServer>[1]) => new Promise<{ po
 
 /** Stands in for Gemini: anything with red paint in it is "bad". `down` makes it fail. */
 export async function fakeGemini() {
-  const state = { down: false, calls: [] as { pictures: Buffer[] }[] };
+  const state = { down: false, slowMs: 0, calls: [] as { pictures: Buffer[] }[] };
   const server = await listen(async (req, res) => {
     const body = JSON.parse((await readBody(req)).toString());
     if (state.down) { res.writeHead(500).end('{}'); return; }
+    if (state.slowMs) await wait(state.slowMs);
     const pictures = body.contents[0].parts.filter((p: { inline_data?: unknown }) => p.inline_data).map((p: { inline_data: { data: string } }) => Buffer.from(p.inline_data.data, 'base64'));
     state.calls.push({ pictures });
     const raw = await sharp(pictures[0]).removeAlpha().raw().toBuffer();

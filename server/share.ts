@@ -76,7 +76,7 @@ async function make(id: string, view: LookingAt, panoramaKey: string, drawings: 
   return sharp(projectRaw(painted.data, painted.info, camera), { raw: { width: camera.width, height: camera.height, channels: 3 } }).jpeg({ quality: 86 }).toBuffer();
 }
 
-const escape = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 let page: { html: string; modified: number } | null = null;
 
 async function indexHtml(): Promise<string> {

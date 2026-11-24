@@ -35,6 +35,8 @@ interface Client {
   strokeTimes: number[];
 }
 
+interface Drawn { stroke: FinishedStroke; bytes: number; added: number; author: string; mod: 'pending' | 'ok' | 'hold' }
+
 interface Room {
   id: string;
   clients: Set<Client>;
@@ -43,7 +45,7 @@ interface Room {
    * author's batch has been checked; only 'ok' strokes get baked into the layer or shown in
    * previews. 'hold' = the moderator wasn't sure: stays up in the place, kept off the map.
    */
-  strokes: Map<string, { stroke: FinishedStroke; bytes: number; added: number; author: string; mod: 'pending' | 'ok' | 'hold' }>;
+  strokes: Map<string, Drawn>;
   /** older strokes, flattened into one tiled image */
   layer: PaintLayer;
   flattening: boolean;
@@ -249,7 +251,7 @@ const MAX_WAIT_MS = Number(process.env.MODERATION_MAX_WAIT_MS ?? 60_000);
 const modTimers = new Map<string, ReturnType<typeof setTimeout>>();
 /** when a person's oldest unchecked stroke in a place was drawn */
 const modFirst = new Map<string, number>();
-const modRunning = new Set<string>();
+const modRunning = new Map<string, Promise<void>>();
 interface Held { id: string; room: string; stroke: FinishedStroke; at: number; verdict: Verdict; removed: boolean; picture: string }
 /**
  * removed strokes, kept 24 h so a wrong call can be restored (GET /internal/held, GET
@@ -268,16 +270,21 @@ function scheduleModeration(room: Room, author: string) {
   modTimers.set(key, setTimeout(() => { modTimers.delete(key); void runModeration(room, author); }, wait));
 }
 
-async function runModeration(room: Room, author: string) {
+/** Check a person's new strokes in a place (after the check that's running, if one is). */
+async function runModeration(room: Room, author: string): Promise<void> {
   const key = `${room.id}\n${author}`;
-  if (modRunning.has(key)) { // the previous check is still running: look again in a moment
-    modTimers.set(key, setTimeout(() => { modTimers.delete(key); void runModeration(room, author); }, 1000));
-    return;
-  }
+  for (let running; (running = modRunning.get(key));) await running;
+  clearTimeout(modTimers.get(key));
+  modTimers.delete(key);
   modFirst.delete(key);
   const batch = [...room.strokes.values()].filter(s => s.author === author && s.mod === 'pending');
   if (!batch.length) return;
-  modRunning.add(key);
+  const check = checkBatch(room, author, batch).finally(() => modRunning.delete(key));
+  modRunning.set(key, check);
+  await check;
+}
+
+async function checkBatch(room: Room, author: string, batch: Drawn[]): Promise<void> {
   try {
     // drawings far apart are judged separately, so one can't hide beside (or take down) another
     for (const drawing of await splitDrawings(batch.map(s => s.stroke))) {
@@ -315,9 +322,29 @@ async function runModeration(room: Room, author: string) {
     // never leave strokes stuck unchecked: anything unexpected means they stay
     console.warn(`[moderation] ${room.id}: ${(e as Error).message}; allowing`);
     for (const s of batch) if (s.mod === 'pending') s.mod = 'ok';
-  } finally {
-    modRunning.delete(key);
   }
+}
+
+/** A shared link's picture waits this long at most for the newest drawings to be checked. */
+const SHARE_WAIT_MS = Number(process.env.SHARE_WAIT_MS ?? 5000);
+/** Checks for shared pictures: one per place in this time. */
+const SHARE_CHECK_EVERY_MS = 10_000;
+const shareChecks = new Map<string, { at: number; done: Promise<unknown> }>();
+
+/** Someone shares this place: check what's waiting there now, so the picture can show it. */
+function checkNow(room: Room): Promise<unknown> {
+  if (!MODERATION_ON || LOG_ONLY) return Promise.resolve(); // (then everything shows anyway)
+  const now = Date.now(), last = shareChecks.get(room.id);
+  let done = last?.done;
+  if (!last || !done || now - last.at >= SHARE_CHECK_EVERY_MS) {
+    const authors = new Set([...room.strokes.values()].filter(s => s.mod === 'pending').map(s => s.author));
+    if (!authors.size) return Promise.resolve();
+    done = Promise.all([...authors].map(author => runModeration(room, author)));
+    shareChecks.delete(room.id);
+    shareChecks.set(room.id, { at: now, done });
+    if (shareChecks.size > 500) shareChecks.delete(shareChecks.keys().next().value!);
+  }
+  return Promise.race([done, new Promise(r => setTimeout(r, SHARE_WAIT_MS))]);
 }
 setInterval(() => { const cut = Date.now() - 24 * 3_600_000; for (const [id, h] of held) if (h.at < cut) held.delete(id); }, 600_000);
 
@@ -377,7 +404,7 @@ setInterval(() => { for (const room of rooms.values()) void flatten(room); }, Ma
 //   GET /api/previews                 -> { [placeId]: version } for places whose preview has drawings
 //   GET /api/previews/<id>/card|loading -> the JPEG
 //   GET /api/layer/<room>/<x_y>         -> a paint-layer tile (WebP)
-//   GET /api/share/<id>.jpg?at=u,v,zoom -> a shared link's picture
+//   GET /api/share/<id>.jpg?at=u,v,zoom -> a shared link's picture (with &v=: the newest drawings get checked first)
 //   GET /<place>?at=u,v,zoom            -> the site's page, telling chat apps about that picture
 const http = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
@@ -420,7 +447,8 @@ const http = createServer((req, res) => {
   const shared = url.pathname.match(/^\/api\/share\/([\w.-]{1,128})\.jpg$/);
   if (shared && isPlace(shared[1])) {
     const id = shared[1], room = rooms.get(id);
-    void sharePicture(id, parseAt(url.searchParams.get('at')), drawingsChanged(id), room ? roomDrawings(room) : () => null).then(jpeg => {
+    const fresh = room && url.searchParams.has('v') ? checkNow(room) : Promise.resolve();
+    void fresh.then(() => sharePicture(id, parseAt(url.searchParams.get('at')), drawingsChanged(id), room ? roomDrawings(room) : () => null)).then(jpeg => {
       if (jpeg) res.writeHead(200, { ...cors, 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=60' }).end(jpeg);
       else res.writeHead(302, { location: `/panorama-pool/${id}-card.jpg`, 'cache-control': 'no-store' }).end(); // too busy: the plain photo
     });

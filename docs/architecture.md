@@ -62,7 +62,8 @@ strokes of the least recently used rooms go.
 
 A shared link says where to look: `/colosseum?at=<u>,<v>,<zoom>` (`shared/placePath.ts`,
 `shared/shareView.ts`). The drawing server (`server/share.ts`) answers with the site's page plus the place's title and picture for chat
-apps, and renders that picture on demand from the photo and the moderated drawings. The place then opens with
+apps, and renders that picture on demand from the photo and the moderated drawings. What was drawn a moment
+ago is checked right then instead of after the usual pause. The place then opens with
 the same picture as its loading frame. Nothing is stored; the latest pictures are cached in memory, and there
 is a limit per minute.
 

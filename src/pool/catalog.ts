@@ -51,7 +51,7 @@ export const MAP_LOCATIONS: MapLocation[] = PANORAMAS.filter(hasCoordinates).map
 /** Coordinates come from the catalog, never untrusted/stale links or a guessed city center. */
 export function panoramaViewUrl(id: string) {
   const panorama = PANORAMA_BY_ID.get(id);
-  if (!panorama) return '/pool';
+  if (!panorama) return '/';
   const params = new URLSearchParams({ imageId: panorama.id });
   if (hasCoordinates(panorama)) {
     params.set('lng', String(panorama.longitude));

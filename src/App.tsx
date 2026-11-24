@@ -9,29 +9,18 @@ import panoramaPreview from './assets/panorama-preview.jpg';
 import touchAndScroll from './assets/touch-and-scroll.svg';
 import mouseRightClick from './assets/mouse-right-click.svg';
 import { DrawingOverlay } from './DrawingOverlay';
-import { fetchInkLevel, saveInkLevel, deviceId } from './inkManager';
-import { supabase } from './supabaseClient';
-import { createCheckoutSession, DEFAULT_TIER } from './subscriptionManager';
-import type { PlusTier } from './subscriptionManager';
-import { PiDropSlashFill } from 'react-icons/pi';
 import { DEFAULT_PANORAMA, PANORAMA_BY_ID, hasCoordinates, type Panorama } from './pool/catalog';
 import { PanoramaDataProvider } from './pool/PanoramaDataProvider';
 import { panoramaLoadingPreviewUrl } from './pool/panoramaImages';
 import { recordVisit } from './pool/visited';
 import { showOwnDrawing } from './pool/localPreview';
-import { DARK_UI } from './theme';
-
-/** PencilKit tool body for the current appearance (tips/bands are shared). */
-/** Double-click / long-press on a drawing to star or report it. Off for now. */
-const STROKE_ACTIONS = false;
-
-const toolBase = (name: string) => `/tools/${name}-base${DARK_UI ? '-dark' : ''}.png`;
 import { loadDeepData } from './deep/surfaceDecal';
 import CloseIcon from './components/CloseIcon';
 import { START_ZOOM } from './pool/startView';
+import { DARK_UI } from './theme';
 
-/** No accounts: admin powers (unlimited ink, delete any drawing) exist only when running locally. */
-const IS_ADMIN = import.meta.env.DEV;
+/** Tool body for the current appearance (tips/bands are shared). */
+const toolBase = (name: string) => `/tools/${name}-base${DARK_UI ? '-dark' : ''}.png`;
 
 // Force preserveDrawingBuffer on all WebGL contexts so we can capture screenshots
 const _origGetContext = HTMLCanvasElement.prototype.getContext;
@@ -65,17 +54,16 @@ function App({ panorama }: { panorama: Panorama }) {
   const viewerRef = useRef<Viewer | null>(null);
   const drawingOverlayRef = useRef<DrawingOverlay | null>(null);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [pencilColor, setPencilColor] = useState(() => {
     const saved = localStorage.getItem('pencilColor');
     if (isHexColor(saved)) return saved;
-    const pool = COLORS.filter(c => c !== 'rainbow');
+    const pool = COLORS;
     return pool[Math.floor(Math.random() * pool.length)];
   });
   const [markerColor, setMarkerColor] = useState(() => {
     const saved = localStorage.getItem('markerColor');
     if (isHexColor(saved)) return saved;
-    const pool = COLORS.filter(c => c !== 'rainbow');
+    const pool = COLORS;
     let color = pool[Math.floor(Math.random() * pool.length)];
     // Avoid same default as pencil
     while (color === pencilColor && pool.length > 1) {
@@ -86,7 +74,7 @@ function App({ panorama }: { panorama: Panorama }) {
   const [crayonColor, setCrayonColor] = useState(() => {
     const saved = localStorage.getItem('crayonColor');
     if (isHexColor(saved)) return saved;
-    const pool = COLORS.filter(c => c !== 'rainbow');
+    const pool = COLORS;
     let color = pool[Math.floor(Math.random() * pool.length)];
     while ((color === pencilColor || color === markerColor) && pool.length > 2) {
       color = pool[Math.floor(Math.random() * pool.length)];
@@ -96,7 +84,7 @@ function App({ panorama }: { panorama: Panorama }) {
   const [fountainPenColor, setFountainPenColor] = useState(() => {
     const saved = localStorage.getItem('fountainPenColor');
     if (isHexColor(saved)) return saved;
-    const pool = COLORS.filter(c => c !== 'rainbow');
+    const pool = COLORS;
     let color = pool[Math.floor(Math.random() * pool.length)];
     while ((color === pencilColor || color === markerColor || color === crayonColor) && pool.length > 3) {
       color = pool[Math.floor(Math.random() * pool.length)];
@@ -106,7 +94,7 @@ function App({ panorama }: { panorama: Panorama }) {
   const [watercolorColor, setWatercolorColor] = useState(() => {
     const saved = localStorage.getItem('watercolorColor');
     if (isHexColor(saved)) return saved;
-    const pool = COLORS.filter(c => c !== 'rainbow');
+    const pool = COLORS;
     let color = pool[Math.floor(Math.random() * pool.length)];
     while ((color === pencilColor || color === markerColor || color === crayonColor || color === fountainPenColor) && pool.length > 4) {
       color = pool[Math.floor(Math.random() * pool.length)];
@@ -127,13 +115,6 @@ function App({ panorama }: { panorama: Panorama }) {
     return () => clearTimeout(timer);
   }, [isLoaded]);
   const thumbBg = panorama.thumbnailUrl || panorama.previewUrl;
-  const [reportTarget, setReportTarget] = useState<{ strokeIds: string[], basicCoord: [number, number], authorDeviceId?: string } | null>(null);
-  const [reportStatus, setReportStatus] = useState<'idle' | 'sending' | 'done'>('idle');
-  const [reportBtnPos, setReportBtnPos] = useState<{ x: number, y: number, visible: boolean }>({ x: 0, y: 0, visible: false });
-  const [reportBtnMounted, setReportBtnMounted] = useState(false);
-  const [reportBtnShow, setReportBtnShow] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeStatus, setLikeStatus] = useState<'idle' | 'toggling'>('idle');
   const activeToolRef = useRef(activeTool);
   const activePointers = useRef(new Map<number, { x: number; y: number }>());
   const isDrawingRef = useRef(false);
@@ -147,51 +128,11 @@ function App({ panorama }: { panorama: Panorama }) {
   const inertiaRef = useRef<number | null>(null);
   const rightClickPanRef = useRef<{ lastX: number; lastY: number; fov: number; moveBuffer: { dx: number; dy: number; time: number }[] } | null>(null);
   const pendingTouchStrokeRef = useRef<{ x: number; y: number; color: string; lineWidth: number; tool: 'pencil' | 'marker' | 'crayon' | 'fountainPen' | 'watercolor'; time: number } | null>(null);
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressPosRef = useRef<{ x: number; y: number } | null>(null);
-  const [drawingHint, setDrawingHint] = useState<{ x: number; y: number; basicCoord: [number, number] } | null>(null);
-  const [drawingHintShow, setDrawingHintShow] = useState(false);
-  const drawingHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [strokesLoadedCount, setStrokesLoadedCount] = useState(0);
-  const [hasMovedView, setHasMovedView] = useState(false);
-
-  const lng = hasCoordinates(panorama) ? String(panorama.longitude) : null;
-  const lat = hasCoordinates(panorama) ? String(panorama.latitude) : null;
-  const camLng = searchParams.get('camLng');
-  const camLat = searchParams.get('camLat');
-  const zoom = searchParams.get('zoom');
-  const pitch = searchParams.get('pitch');
-  const bearing = searchParams.get('bearing');
   const imageId = panorama.id;
 
-  // Ink Logic
-  // Ink limit removed: drawing costs nothing, so ink never depletes.
-  const INK_COST_PER_PIXEL = 0;
-  const INK_COST_PER_STROKE = 0;
-  const INK_REGEN_RATE = 0.000307; // ~1.5 hr full regen at 60fps
-
-  const INK_RECOVER_THRESHOLD = 15; // Must regen to this before drawing is unlocked
-
-  const [inkLevel, setInkLevel] = useState(100);
-  const [inkPillVisible, setInkPillVisible] = useState(false);
-  const [inkPillCollapsed, setInkPillCollapsed] = useState(false);
-  const inkPillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [inkToastVisible, setInkToastVisible] = useState(false);
-  const inkToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inkToastShownRef = useRef(false); // Only show once per depletion cycle
-  const [inkPulsing, setInkPulsing] = useState(false);
-  const inkLevelRef = useRef(100); // Mutable ref for instant access
-  const inkDepletedRef = useRef(false); // Locked until ink recovers to threshold
-  const inkBeforeStrokeRef = useRef(100); // Snapshot to fully restore on multi-touch cancel
-  const inkFillRef = useRef<HTMLDivElement>(null); // Ref for visual update
-  const lastSaveTime = useRef(0);
-  const inkLoaded = useRef(false); // Gate saves until initial fetch completes
-  const tierRef = useRef<PlusTier>(DEFAULT_TIER);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const navPenGroupRef = useRef<HTMLDivElement>(null);
   const [penScrollMask, setPenScrollMask] = useState<'none' | 'right' | 'left' | 'both'>('none');
-  const [showPlusSheet, setShowPlusSheet] = useState(false);
-  const [isPlusSheetClosing, setIsPlusSheetClosing] = useState(false);
   const [showTutorial, setShowTutorial] = useState(() => !localStorage.getItem('tutorialSeen'));
   const [tutorialFading, setTutorialFading] = useState(false);
   const showTutorialRef = useRef(!localStorage.getItem('tutorialSeen'));
@@ -217,35 +158,6 @@ function App({ panorama }: { panorama: Panorama }) {
     ro.observe(el);
     return () => { el.removeEventListener('scroll', update); ro.disconnect(); };
   }, []);
-
-  // Ink is per device (no accounts): load it once
-  useEffect(() => {
-    fetchInkLevel(undefined, tierRef.current.maxInk).then(level => {
-      setInkLevel(level);
-      inkLevelRef.current = level;
-      inkLoaded.current = true;
-      if (level >= INK_RECOVER_THRESHOLD) inkDepletedRef.current = false;
-      updateInkVisuals();
-    });
-
-    // Save ink when page closes
-    const handleBeforeUnload = () => {
-      if (inkLoaded.current) {
-        saveInkLevel(inkLevelRef.current, undefined);
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
-
-  // Save ink to backend (debounced — max once every 5s, only after initial load)
-  useEffect(() => {
-    if (!inkLoaded.current) return;
-    const now = Date.now();
-    if (now - lastSaveTime.current < 5000) return;
-    lastSaveTime.current = now;
-    saveInkLevel(inkLevel, undefined);
-  }, [inkLevel]);
 
   // The photo credit rests just above the drawing tools on phones; the bar's height scales
   // with the screen, so publish its real height as --toolbar-h.
@@ -280,27 +192,12 @@ function App({ panorama }: { panorama: Panorama }) {
       setRedoAvailable(drawingOverlayRef.current.canRedo());
     }
   }, []);
-  const lastInkPos = useRef<{ x: number, y: number } | null>(null);
   const selectedColorRef = useRef(selectedColor);
-
-  // Shared rainbow hue — drives tools, ink bar, and drawn strokes from one clock
-  const [rainbowHue, setRainbowHue] = useState(0);
-  useEffect(() => {
-    let rafId: number;
-    const tick = () => {
-      setRainbowHue((Date.now() / 20) % 360);
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, []);
-  const rainbowColor = `hsl(${rainbowHue}, 90%, 55%)`;
 
   // Keep ref in sync & persist colors
   useEffect(() => {
     selectedColorRef.current = selectedColor;
-    updateInkVisuals();
-  }, [selectedColor, pencilColor, markerColor, crayonColor, fountainPenColor, watercolorColor, activeTool]);
+  }, [selectedColor]);
 
   useEffect(() => { localStorage.setItem('pencilColor', pencilColor); }, [pencilColor]);
   useEffect(() => { localStorage.setItem('markerColor', markerColor); }, [markerColor]);
@@ -308,188 +205,21 @@ function App({ panorama }: { panorama: Panorama }) {
   useEffect(() => { localStorage.setItem('fountainPenColor', fountainPenColor); }, [fountainPenColor]);
   useEffect(() => { localStorage.setItem('watercolorColor', watercolorColor); }, [watercolorColor]);
 
-  // Update visual pill immediately
-  const updateInkVisuals = () => {
-    if (inkFillRef.current) {
-      inkFillRef.current.style.height = `${(inkLevelRef.current / tierRef.current.maxInk) * 100}%`;
-      const inkPercent = (inkLevelRef.current / tierRef.current.maxInk) * 100;
-      if (inkPercent < 20) {
-        inkFillRef.current.classList.remove('ink-fill-rainbow');
-        inkFillRef.current.style.background = '#ff3b30';
-        inkFillRef.current.style.boxShadow = '0 0 10px #ff3b3080';
-      } else if (selectedColorRef.current === 'rainbow') {
-        // Rainbow ink bar is now driven by JS inline styles, not CSS animation
-        inkFillRef.current.classList.remove('ink-fill-rainbow');
-        // background/boxShadow set inline in JSX via rainbowColor
-      } else {
-        inkFillRef.current.classList.remove('ink-fill-rainbow');
-        inkFillRef.current.style.background = selectedColorRef.current;
-        inkFillRef.current.style.boxShadow = `0 0 10px ${selectedColorRef.current}80`;
-      }
-    }
-  };
-
-  const showInkToast = useCallback(() => {
-    if (inkToastShownRef.current) return;
-    inkToastShownRef.current = true;
-    setInkToastVisible(true);
-    if (inkToastTimerRef.current) clearTimeout(inkToastTimerRef.current);
-    inkToastTimerRef.current = setTimeout(() => setInkToastVisible(false), 4000);
-  }, []);
-
-  // Compute human-readable regen time remaining
-  const getRegenTimeString = useCallback(() => {
-    const maxInk = tierRef.current.maxInk;
-    const remaining = maxInk - inkLevelRef.current;
-    if (remaining <= 0) return 'Full';
-    // INK_REGEN_RATE is per frame at 60fps
-    const framesNeeded = remaining / (INK_REGEN_RATE * tierRef.current.regenMultiplier);
-    const seconds = framesNeeded / 60;
-    const minutes = Math.ceil(seconds / 60);
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (mins === 0) return `${hours}h`;
-    return `${hours}h ${mins}m`;
-  }, []);
-
-  // Sync state with ref for regeneration and initial load
-  // We don't need updateInkVisuals here as the color effect handles it,
-  // but we do need to sync inkLevelRef if state changes externally (unlikely now)
-  useEffect(() => {
-    inkLevelRef.current = inkLevel;
-  }, [inkLevel]);
-
-  // Show ink pill when drawing, hide after delay when stopped
-  useEffect(() => {
-    if (inkPillTimerRef.current) {
-      clearTimeout(inkPillTimerRef.current);
-      inkPillTimerRef.current = null;
-    }
-    if (isDrawing) {
-      setInkPillVisible(true);
-      setInkPillCollapsed(true);
-    } else if (inkPillVisible) {
-      inkPillTimerRef.current = setTimeout(() => setInkPillVisible(false), 3000);
-    }
-  }, [isDrawing]);
-
-  // Regenerate ink loop
-  useEffect(() => {
-    let animationFrameId: number;
-    let frameCount = 0;
-    const regenerate = () => {
-      const maxInk = tierRef.current.maxInk;
-      if (!isDrawing && inkLevelRef.current < maxInk) {
-        inkLevelRef.current = Math.min(inkLevelRef.current + INK_REGEN_RATE * tierRef.current.regenMultiplier, maxInk);
-        if (inkDepletedRef.current && inkLevelRef.current >= INK_RECOVER_THRESHOLD) {
-          inkDepletedRef.current = false;
-          inkToastShownRef.current = false; // Allow toast again on next depletion
-          setInkPulsing(false);
-        }
-        updateInkVisuals();
-        // Only sync React state periodically to avoid re-render choppiness
-        frameCount++;
-        if (frameCount % 10 === 0 || inkLevelRef.current >= maxInk) {
-          setInkLevel(inkLevelRef.current);
-        }
-      }
-      animationFrameId = requestAnimationFrame(regenerate);
-    };
-    animationFrameId = requestAnimationFrame(regenerate);
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [isDrawing]);
-
-  const handleBack = async () => {
-    // Save ink before leaving
-    saveInkLevel(inkLevelRef.current, undefined);
-
-    // Fade out drawing strokes before leaving
+  const handleBack = () => {
     if (drawingOverlayRef.current) {
       if (isDrawingRef.current) void drawingOverlayRef.current.endStroke();
       showOwnDrawing(panorama, drawingOverlayRef.current);
       drawingOverlayRef.current.leaveRealtime();
-      drawingOverlayRef.current.fadeOut();
+      void drawingOverlayRef.current.fadeOut();
     }
-
-    // Animate viewer to initial position (bearing) before zooming out
-    if (viewerRef.current) {
-      const viewer = viewerRef.current;
-      const targetBearing = parseFloat(bearing || '0');
-      const targetPitch = 0; // Reset pitch to horizon
-
-      // In MapillaryJS v4, getBearing/getPitch return Promises
-      try {
-        // @ts-ignore
-        const currentBearing = await (typeof viewer.getBearing === 'function' ? viewer.getBearing() : Promise.resolve(0));
-        // @ts-ignore
-        const currentPitch = await (typeof viewer.getPitch === 'function' ? viewer.getPitch() : Promise.resolve(0));
-
-        const startBearing = currentBearing;
-        const startPitch = currentPitch;
-
-        const startTime = performance.now();
-        const duration = 400; // ms
-
-        // Only animate if methods exist and we are far enough
-        // @ts-ignore
-        if (typeof viewer.setBearing === 'function' &&
-          (Math.abs(startBearing - targetBearing) > 2 || Math.abs(startPitch - targetPitch) > 2)) {
-
-          await new Promise<void>(resolve => {
-            const animate = (currentTime: number) => {
-              const elapsed = currentTime - startTime;
-              const t = Math.min(elapsed / duration, 1);
-              const ease = 1 - Math.pow(1 - t, 3);
-
-              const nowBearing = startBearing + (targetBearing - startBearing) * ease;
-              const nowPitch = startPitch + (targetPitch - startPitch) * ease;
-
-              // @ts-ignore
-              viewer.setBearing(nowBearing);
-              // @ts-ignore
-              viewer.setPitch(nowPitch);
-
-              if (t < 1) {
-                requestAnimationFrame(animate);
-              } else {
-                resolve();
-              }
-            };
-            requestAnimationFrame(animate);
-          });
-        }
-      } catch (e) {
-        console.warn('Rotation animation failed', e);
-      }
+    // the map reopens where this place is
+    const back = new URLSearchParams();
+    if (hasCoordinates(panorama)) {
+      back.set('lng', String(panorama.longitude));
+      back.set('lat', String(panorama.latitude));
+      back.set('imageId', panorama.id);
     }
-
-    // Store collapse animation state for Heatmap to pick up
-    // Use marker lng/lat so Heatmap can project to accurate screen coords after map loads
-    if (lng && lat) {
-      sessionStorage.setItem('collapseAnimation', JSON.stringify({
-        markerLng: parseFloat(lng),
-        markerLat: parseFloat(lat),
-        thumbUrl: thumbBg || '',
-        imageId: imageId || '',
-      }));
-    }
-
-    // Navigate immediately — Heatmap shows the shrinking circle over the real map
-    let params = '';
-    if (lng && lat) {
-      params = `?lng=${lng}&lat=${lat}`;
-      if (camLng !== null) {
-        params += `&camLng=${camLng}&camLat=${camLat}&zoom=${zoom}&pitch=${pitch}&bearing=${bearing}`;
-      }
-      if (imageId) {
-        params += `&imageId=${imageId}`;
-      }
-      if (thumbBg) {
-        params += `&thumbUrl=${encodeURIComponent(thumbBg)}`;
-      }
-    }
-    navigate('/' + params);
+    navigate(`/?${back}`);
   };
 
   useEffect(() => {
@@ -561,7 +291,6 @@ function App({ panorama }: { panorama: Panorama }) {
           if (disposed) return;
           drawingOverlayRef.current?.fadeIn();
           setIsStrokesLoading(false);
-          setStrokesLoadedCount(c => c + 1);
         });
       };
       drawingOverlayRef.current.setViewer(viewerRef.current);
@@ -605,30 +334,6 @@ function App({ panorama }: { panorama: Panorama }) {
 
   useEffect(() => {
     activeToolRef.current = activeTool;
-    if (activeTool && activeTool !== 'eraser') { // pencil, marker, crayon
-      // Sync ink level and visuals when selecting a drawing tool
-      setInkLevel(inkLevelRef.current);
-      updateInkVisuals();
-      // Only expand to full pill if it's not currently visible (was hidden)
-      if (!inkPillVisible) {
-        setInkPillCollapsed(false);
-      }
-      setInkPillVisible(true);
-      if (inkPillTimerRef.current) clearTimeout(inkPillTimerRef.current);
-      inkPillTimerRef.current = setTimeout(() => {
-        setInkPillVisible(false);
-        setTimeout(() => setInkPillCollapsed(false), 300);
-      }, 3000);
-    } else if (activeTool === 'eraser') {
-      // Eraser doesn't use ink — hide pill and reset collapsed state
-      setInkPillVisible(false);
-      setInkPillCollapsed(false);
-      if (inkPillTimerRef.current) clearTimeout(inkPillTimerRef.current);
-    } else if (!activeTool) {
-      // Tool deselected — hide pill, reset collapsed after fade-out
-      setInkPillVisible(false);
-      setTimeout(() => setInkPillCollapsed(false), 300);
-    }
     if (!viewerRef.current) return;
     if (activeTool) {
       viewerRef.current.deactivateComponent('pointer');
@@ -637,254 +342,13 @@ function App({ panorama }: { panorama: Panorama }) {
     }
   }, [activeTool]);
 
-  // Hit-test a screen position and select/deselect the stroke under it
-  const doHitTest = useCallback((posX: number, posY: number) => {
-    if (!drawingOverlayRef.current) return;
-    drawingOverlayRef.current.hitTestAt(posX, posY).then(async hit => {
-      if (hit && drawingOverlayRef.current && viewerRef.current) {
-        const { strokeIds, authorDeviceId } = drawingOverlayRef.current.selectStroke(hit);
-        const basic = await viewerRef.current.unprojectToBasic([posX, posY]);
-        if (basic) {
-          setReportTarget({ strokeIds, basicCoord: [basic[0], basic[1]], authorDeviceId });
-          setReportStatus('idle');
-          // Check like status for this drawing (location + author)
-          const currentImageId = drawingOverlayRef.current.getImageId();
-          if (currentImageId && authorDeviceId) {
-            supabase.from('likes').select('id').eq('image_id', currentImageId).eq('device_id', deviceId).eq('author_device_id', authorDeviceId).maybeSingle().then(({ data }) => {
-              setIsLiked(!!data);
-            });
-          }
-        }
-      } else {
-        drawingOverlayRef.current?.clearSelection();
-        setReportTarget(null);
-      }
-    });
-  }, []);
-
-  // Start a long-press timer at the given screen position
-  const startLongPress = useCallback((posX: number, posY: number) => {
-    if (!STROKE_ACTIONS) return;
-    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    longPressPosRef.current = { x: posX, y: posY };
-    longPressTimerRef.current = setTimeout(() => {
-      const pos = longPressPosRef.current;
-      if (pos) {
-        // Cancel pending touch stroke (before drawing started)
-        pendingTouchStrokeRef.current = null;
-        // Cancel any in-progress stroke (mouse long-press edge case)
-        if (isDrawingRef.current && drawingOverlayRef.current) {
-          drawingOverlayRef.current.endStroke();
-          if (drawingOverlayRef.current.canUndo()) {
-            drawingOverlayRef.current.undo();
-          }
-          setIsDrawing(false);
-          isDrawingRef.current = false;
-        }
-        doHitTest(pos.x, pos.y);
-        longPressPosRef.current = null;
-      }
-    }, 600);
-  }, [doHitTest]);
-
-  const cancelLongPress = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressPosRef.current = null;
-  }, []);
-
-  // Double-click and long-press to select strokes for reporting (when no tool active)
+  // Right-click pans the camera, so no context menu
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    // Suppress right-click context menu
-    const onContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
-
-    // Long-press: start timer on pointerdown (only fires when no activeTool,
-    // since React capture handlers call stopImmediatePropagation when a tool is active)
-    const onDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
-      const rect = container.getBoundingClientRect();
-      startLongPress(e.clientX - rect.left, e.clientY - rect.top);
-    };
-
-    // Cancel long-press if moved too far
-    const onMove = (e: PointerEvent) => {
-      if (!longPressPosRef.current || !longPressTimerRef.current) return;
-      const rect = container.getBoundingClientRect();
-      const dx = (e.clientX - rect.left) - longPressPosRef.current.x;
-      const dy = (e.clientY - rect.top) - longPressPosRef.current.y;
-      if (dx * dx + dy * dy > 400) {
-        cancelLongPress();
-      }
-    };
-
-    const onUp = () => {
-      cancelLongPress();
-    };
-
-    // Double-click to select strokes for reporting (desktop)
-    const onDblClick = (e: MouseEvent) => {
-      if (!STROKE_ACTIONS) return;
-      const rect = container.getBoundingClientRect();
-      doHitTest(e.clientX - rect.left, e.clientY - rect.top);
-    };
-
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
     container.addEventListener('contextmenu', onContextMenu, { capture: true });
-    container.addEventListener('pointerdown', onDown, { capture: true });
-    container.addEventListener('pointermove', onMove, { capture: true });
-    container.addEventListener('pointerup', onUp, { capture: true });
-    container.addEventListener('dblclick', onDblClick, { capture: true });
-    return () => {
-      container.removeEventListener('contextmenu', onContextMenu, { capture: true });
-      container.removeEventListener('pointerdown', onDown, { capture: true });
-      container.removeEventListener('pointermove', onMove, { capture: true });
-      container.removeEventListener('pointerup', onUp, { capture: true });
-      container.removeEventListener('dblclick', onDblClick, { capture: true });
-      cancelLongPress();
-    };
-  }, [doHitTest, startLongPress, cancelLongPress]);
-
-  // Show contextual hint after user has been idle (not moving camera) for a few seconds
-  const hintIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hintShownRef = useRef(false);
-  useEffect(() => {
-    // the hint teaches double-click / hold to star or report — only while that's enabled
-    if (!STROKE_ACTIONS || strokesLoadedCount === 0 || !hasMovedView || hintShownRef.current) return;
-    if (localStorage.getItem('drawingHintSeen')) return;
-    // Reset idle timer on any pointer activity
-    const resetTimer = () => {
-      if (hintIdleTimerRef.current) clearTimeout(hintIdleTimerRef.current);
-      hintIdleTimerRef.current = startHintCheck();
-    };
-    const startHintCheck = () => setTimeout(async () => {
-      if (hintShownRef.current) return;
-      if (!drawingOverlayRef.current || !viewerRef.current) return;
-      const centers = drawingOverlayRef.current.getRemoteDrawingBasicCenters();
-      if (centers.length === 0) return;
-      // Project all and pick the one closest to screen center
-      const screenCenterX = window.innerWidth / 2;
-      const screenCenterY = window.innerHeight / 2;
-      let best: { x: number; y: number; basicCoord: [number, number]; dist: number } | null = null;
-      for (const basicCoord of centers) {
-        try {
-          const screenPos = await viewerRef.current.projectFromBasic(basicCoord);
-          if (!screenPos) continue;
-          const rect = containerRef.current?.getBoundingClientRect();
-          const x = screenPos[0] + (rect?.left || 0);
-          const y = screenPos[1] + (rect?.top || 0);
-          if (x < 20 || x > window.innerWidth - 20 || y < 20 || y > window.innerHeight - 20) continue;
-          const dist = Math.hypot(x - screenCenterX, y - screenCenterY);
-          if (!best || dist < best.dist) {
-            best = { x, y, basicCoord, dist };
-          }
-        } catch {}
-      }
-      // Only show hint if a drawing is reasonably close to screen center
-      if (!best || best.dist > Math.min(window.innerWidth, window.innerHeight) * 0.35) return;
-      setDrawingHint({ x: best.x, y: best.y, basicCoord: best.basicCoord });
-      requestAnimationFrame(() => setDrawingHintShow(true));
-      // Auto-dismiss after 10s
-      drawingHintTimerRef.current = setTimeout(() => {
-        setDrawingHintShow(false);
-        setTimeout(() => setDrawingHint(null), 300);
-        localStorage.setItem('drawingHintSeen', '1');
-      }, 10000);
-      hintShownRef.current = true;
-    }, 3500);
-    // Start initial timer
-    hintIdleTimerRef.current = startHintCheck();
-    // Reset on any pointer/touch activity
-    window.addEventListener('pointermove', resetTimer);
-    window.addEventListener('pointerdown', resetTimer);
-    return () => {
-      if (hintIdleTimerRef.current) clearTimeout(hintIdleTimerRef.current);
-      window.removeEventListener('pointermove', resetTimer);
-      window.removeEventListener('pointerdown', resetTimer);
-    };
-  }, [strokesLoadedCount, hasMovedView]);
-
-  // Dismiss hint on any interaction
-  useEffect(() => {
-    if (!drawingHint) return;
-    const dismiss = () => {
-      if (drawingHintTimerRef.current) clearTimeout(drawingHintTimerRef.current);
-      setDrawingHintShow(false);
-      setTimeout(() => setDrawingHint(null), 300);
-      localStorage.setItem('drawingHintSeen', '1');
-    };
-    window.addEventListener('pointerdown', dismiss, { once: true });
-    return () => window.removeEventListener('pointerdown', dismiss);
-  }, [drawingHint]);
-
-  // Track hint position via projection
-  useEffect(() => {
-    if (!drawingHint || !viewerRef.current) return;
-    let rafId: number;
-    const update = async () => {
-      if (!viewerRef.current || !drawingHint) return;
-      try {
-        const screenPos = await viewerRef.current.projectFromBasic(drawingHint.basicCoord);
-        if (screenPos) {
-          const rect = containerRef.current?.getBoundingClientRect();
-          setDrawingHint(prev => prev ? { ...prev, x: screenPos[0] + (rect?.left || 0), y: screenPos[1] + (rect?.top || 0) } : null);
-        }
-      } catch {}
-      rafId = requestAnimationFrame(update);
-    };
-    rafId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(rafId);
-  }, [drawingHint?.basicCoord[0], drawingHint?.basicCoord[1]]);
-
-  // Animate report button mount/unmount
-  useEffect(() => {
-    if (reportTarget) {
-      setReportBtnMounted(true);
-      // Trigger enter animation on next frame
-      requestAnimationFrame(() => setReportBtnShow(true));
-    } else {
-      setReportBtnShow(false);
-      // Keep mounted during exit animation, then unmount
-      const timer = setTimeout(() => setReportBtnMounted(false), 250);
-      return () => clearTimeout(timer);
-    }
-  }, [reportTarget]);
-
-  // Project report button position to screen space every frame
-  useEffect(() => {
-    if (!reportTarget || !viewerRef.current) return;
-    let rafId: number;
-    const update = async () => {
-      if (!viewerRef.current || !reportTarget) return;
-      try {
-        const screenPos = await viewerRef.current.projectFromBasic(reportTarget.basicCoord);
-        if (screenPos) {
-          const rect = containerRef.current?.getBoundingClientRect();
-          const x = screenPos[0] + (rect?.left || 0);
-          const y = screenPos[1] + (rect?.top || 0);
-          const inView = x > -50 && x < window.innerWidth + 50 && y > -50 && y < window.innerHeight + 50;
-          setReportBtnPos({ x, y: y - 40, visible: inView });
-        } else {
-          setReportBtnPos(prev => ({ ...prev, visible: false }));
-        }
-      } catch {
-        setReportBtnPos(prev => ({ ...prev, visible: false }));
-      }
-      rafId = requestAnimationFrame(update);
-    };
-    rafId = requestAnimationFrame(update);
-    return () => cancelAnimationFrame(rafId);
-  }, [reportTarget]);
-
-  const handleSetActiveTool = useCallback((tool: 'pencil' | 'marker' | 'crayon' | 'fountainPen' | 'watercolor' | 'eraser') => {
-    setActiveTool(tool);
-    drawingOverlayRef.current?.clearSelection();
-    setReportTarget(null);
+    return () => container.removeEventListener('contextmenu', onContextMenu, { capture: true });
   }, []);
 
   const getPointerPosition = useCallback((e: React.PointerEvent) => {
@@ -897,7 +361,6 @@ function App({ panorama }: { panorama: Panorama }) {
   }, []);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if (!hasMovedView) setHasMovedView(true);
     // Track pointers for multi-touch (always, regardless of tool)
     const rect = containerRef.current?.getBoundingClientRect();
     activePointers.current.set(e.pointerId, {
@@ -920,7 +383,6 @@ function App({ panorama }: { panorama: Panorama }) {
       }
       // Cancel pending touch stroke that hasn't started drawing yet
       pendingTouchStrokeRef.current = null;
-      cancelLongPress();
       // Cancel any active stroke if drawing
       if (isDrawingRef.current && drawingOverlayRef.current) {
         drawingOverlayRef.current.endStroke();
@@ -929,20 +391,8 @@ function App({ panorama }: { panorama: Panorama }) {
             drawingOverlayRef.current.undo();
           }
         }, 50);
-        // Fully restore ink to pre-stroke level (covers per-stroke + per-pixel costs)
-        inkLevelRef.current = inkBeforeStrokeRef.current;
-        inkDepletedRef.current = false;
-        updateInkVisuals();
         setIsDrawing(false);
         isDrawingRef.current = false;
-        lastInkPos.current = null;
-        // Hide ink pill immediately — this was a pan, not a draw
-        setInkPillVisible(false);
-        setInkPillCollapsed(false);
-        if (inkPillTimerRef.current) {
-          clearTimeout(inkPillTimerRef.current);
-          inkPillTimerRef.current = null;
-        }
       }
       // Initialize pinch gesture state
       const pts = [...activePointers.current.values()];
@@ -1001,49 +451,28 @@ function App({ panorama }: { panorama: Panorama }) {
     const pos = getPointerPosition(e);
     if (!pos) return;
 
-    const isAdmin = IS_ADMIN;
-    if (activeTool !== 'eraser' && inkDepletedRef.current && !isAdmin) {
-      showInkToast();
-      return;
-    }
-
     if (inertiaRef.current) {
       cancelAnimationFrame(inertiaRef.current);
       inertiaRef.current = null;
-    }
-
-    // Dismiss report selection when starting to draw
-    if (reportTarget) {
-      drawingOverlayRef.current.clearSelection();
-      setReportTarget(null);
     }
 
     if (activeTool === 'eraser') {
       if (e.pointerType !== 'mouse') drawingOverlayRef.current.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS.eraser, true);
       drawingOverlayRef.current.eraseAt(pos.x, pos.y, BRUSH_CURSOR_RADIUS.eraser);
     } else if (e.pointerType === 'touch') {
-      // Touch: defer stroke start until finger moves (allows long-press to report)
+      // Touch: wait until the finger moves, so a second finger can start a pan instead
       const lineWidth = activeTool === 'marker' ? 8 : 3;
       pendingTouchStrokeRef.current = { x: pos.x, y: pos.y, color: selectedColor, lineWidth, tool: activeTool as 'pencil' | 'marker' | 'crayon' | 'fountainPen' | 'watercolor', time: Date.now() };
-      // Start long-press timer (native listener is blocked by stopImmediatePropagation)
-      startLongPress(pos.x, pos.y);
     } else {
       // Mouse: start stroke immediately
       const lineWidth = activeTool === 'marker' ? 8 : 3;
-      inkBeforeStrokeRef.current = inkLevelRef.current;
-      if (!isAdmin) {
-        inkLevelRef.current = Math.max(inkLevelRef.current - INK_COST_PER_STROKE, 0);
-        if (inkLevelRef.current === 0) inkDepletedRef.current = true;
-        updateInkVisuals();
-      }
       // stylus (Apple Pencil): share the ring first, like touch, so others get our brush size
       if (e.pointerType !== 'mouse') drawingOverlayRef.current.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS[activeTool] ?? 4, true);
       drawingOverlayRef.current.startStroke(pos.x, pos.y, selectedColor, lineWidth, activeTool);
       setIsDrawing(true);
       isDrawingRef.current = true;
-      lastInkPos.current = pos;
     }
-  }, [activeTool, selectedColor, pencilColor, markerColor, getPointerPosition, startLongPress, hasMovedView, isLoaded, isStrokesLoading]);
+  }, [activeTool, selectedColor, getPointerPosition, isLoaded, isStrokesLoading]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     // Block native events from reaching Mapillary during drawing or pinch
@@ -1140,7 +569,7 @@ function App({ panorama }: { panorama: Panorama }) {
     // button is held the stroke itself is the preview, so the outline stays empty.
     if (activeTool && e.pointerType === 'mouse') {
       // the eraser shows its ring too, just never filled with paint
-      const hoverColor = activeTool !== 'eraser' && e.buttons === 0 && selectedColorRef.current !== 'rainbow' ? selectedColorRef.current : null;
+      const hoverColor = activeTool !== 'eraser' && e.buttons === 0 ? selectedColorRef.current : null;
       drawingOverlayRef.current.updateBrushCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS[activeTool] ?? 4, hoverColor);
     } else {
       drawingOverlayRef.current.hideBrushCursor();
@@ -1152,22 +581,13 @@ function App({ panorama }: { panorama: Panorama }) {
       const dx = pos.x - pending.x;
       const dy = pos.y - pending.y;
       if (dx * dx + dy * dy > 36 && Date.now() - pending.time > 80) { // 6px + 80ms delay to avoid accidental draw during pinch
-        cancelLongPress();
         pendingTouchStrokeRef.current = null;
-        inkBeforeStrokeRef.current = inkLevelRef.current;
-        const isAdmin = IS_ADMIN;
-        if (!isAdmin) {
-          inkLevelRef.current = Math.max(inkLevelRef.current - INK_COST_PER_STROKE, 0);
-          if (inkLevelRef.current === 0) inkDepletedRef.current = true;
-          updateInkVisuals();
-        }
         // share the ring first, so others get our brush size before the stroke starts
         drawingOverlayRef.current.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS[pending.tool] ?? 4, true);
         drawingOverlayRef.current.startStroke(pending.x, pending.y, pending.color, pending.lineWidth, pending.tool);
         drawingOverlayRef.current.addPoint(pos.x, pos.y);
         setIsDrawing(true);
         isDrawingRef.current = true;
-        lastInkPos.current = pos;
       }
       return;
     }
@@ -1181,44 +601,16 @@ function App({ panorama }: { panorama: Panorama }) {
     }
 
     if (isDrawing) {
-      const isAdmin = IS_ADMIN;
-      if (inkLevelRef.current > 0 || isAdmin) {
-        // every sample since the last event (pens and fast fingers report more than one per frame),
-        // so quick curves stay curves
-        const overlay = drawingOverlayRef.current;
-        const rect = containerRef.current?.getBoundingClientRect();
-        const samples = rect ? e.nativeEvent.getCoalescedEvents?.() ?? [] : [];
-        for (const s of samples) overlay.addPoint(s.clientX - rect!.left, s.clientY - rect!.top);
-        overlay.addPoint(pos.x, pos.y);
-        if (e.pointerType !== 'mouse' && activeTool) drawingOverlayRef.current.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS[activeTool] ?? 4);
-
-        if (lastInkPos.current && !isAdmin) {
-          const dx = pos.x - lastInkPos.current.x;
-          const dy = pos.y - lastInkPos.current.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          // Direct update
-          const newLevel = Math.max(inkLevelRef.current - dist * INK_COST_PER_PIXEL, 0);
-          inkLevelRef.current = newLevel;
-          updateInkVisuals();
-
-          // We DON'T call setInkLevel here to avoid re-renders during draw
-        }
-        lastInkPos.current = pos;
-      } else {
-        inkDepletedRef.current = true;
-        drawingOverlayRef.current.endStroke();
-        setIsDrawing(false);
-        setInkLevel(0);
-        showInkToast();
-        setInkPulsing(true);
-        // Show full pill and keep it visible while pulsing
-        setInkPillCollapsed(false);
-        setInkPillVisible(true);
-        if (inkPillTimerRef.current) clearTimeout(inkPillTimerRef.current);
-      }
+      // every sample since the last event (pens and fast fingers report more than one per frame),
+      // so quick curves stay curves
+      const overlay = drawingOverlayRef.current;
+      const rect = containerRef.current?.getBoundingClientRect();
+      const samples = rect ? e.nativeEvent.getCoalescedEvents?.() ?? [] : [];
+      for (const s of samples) overlay.addPoint(s.clientX - rect!.left, s.clientY - rect!.top);
+      overlay.addPoint(pos.x, pos.y);
+      if (e.pointerType !== 'mouse' && activeTool) overlay.shareTouchCursor(pos.x, pos.y, BRUSH_CURSOR_RADIUS[activeTool] ?? 4);
     }
-  }, [isDrawing, activeTool, getPointerPosition, cancelLongPress]);
+  }, [isDrawing, activeTool, getPointerPosition]);
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     // Block native events if we were handling a pinch or drawing
@@ -1312,7 +704,6 @@ function App({ panorama }: { panorama: Panorama }) {
     if (activePointers.current.size > 0) return;
 
     // Clear any pending touch stroke that never started
-    cancelLongPress();
     pendingTouchStrokeRef.current = null;
 
     if (!isDrawingRef.current && activeTool !== 'eraser') {
@@ -1322,54 +713,18 @@ function App({ panorama }: { panorama: Panorama }) {
 
     setIsDrawing(false);
     isDrawingRef.current = false;
-    lastInkPos.current = null;
 
     if (activeTool === 'eraser' && drawingOverlayRef.current) {
-      const fullRefund = drawingOverlayRef.current.finalizeEraser();
+      drawingOverlayRef.current.finalizeEraser();
       refreshUndoRedo();
       if (e.pointerType !== 'mouse') drawingOverlayRef.current.shareCursorHide();
-      const refund = fullRefund * 0.50; // Refund 50% of erased ink
-      if (refund > 0) {
-        const maxInk = tierRef.current.maxInk;
-        inkLevelRef.current = Math.min(inkLevelRef.current + refund, maxInk);
-        if (inkDepletedRef.current && inkLevelRef.current >= INK_RECOVER_THRESHOLD) {
-          inkDepletedRef.current = false;
-        }
-        // Enable smooth height transition for refund animation
-        if (inkFillRef.current) inkFillRef.current.classList.add('refunding');
-        setInkLevel(inkLevelRef.current);
-        updateInkVisuals();
-        // Show pill with pulse effect for ink refund
-        setInkPillCollapsed(false);
-        setInkPillVisible(true);
-        // Trigger refund pulse via DOM class (re-triggerable per erase)
-        const pill = inkFillRef.current?.closest('.ink-pill');
-        if (pill) {
-          pill.classList.remove('refund-pulse');
-          void (pill as HTMLElement).offsetWidth; // force reflow to re-trigger animation
-          pill.classList.add('refund-pulse');
-        }
-        // Clean up after animation
-        setTimeout(() => {
-          if (inkFillRef.current) inkFillRef.current.classList.remove('refunding');
-          pill?.classList.remove('refund-pulse');
-        }, 800);
-      }
     }
 
-    if (drawingOverlayRef.current && activeTool !== 'eraser') {
-      const inkCost = inkBeforeStrokeRef.current - inkLevelRef.current;
-      drawingOverlayRef.current.setStrokeInkCost(inkCost);
-      drawingOverlayRef.current.endStroke();
-      setInkLevel(inkLevelRef.current); // Sync state on mouse up
-    }
-
-    // Force immediate save to backend
-    saveInkLevel(inkLevelRef.current, undefined);
+    if (activeTool !== 'eraser') void drawingOverlayRef.current?.endStroke();
 
     // Delayed refresh: textures finalize async after endStroke
     setTimeout(() => refreshUndoRedo(), 600);
-  }, [activeTool, isDrawing, refreshUndoRedo, cancelLongPress]);
+  }, [activeTool, refreshUndoRedo]);
 
   // Show grab cursor when Shift is held while a tool is active
   useEffect(() => {
@@ -1619,38 +974,6 @@ function App({ panorama }: { panorama: Panorama }) {
         </button>
 
 
-        {/* Ink Pill Slider */}
-        <div style={{ display: 'none' }}>
-        <div className={`ink-pill ${inkPillVisible || isDrawing || inkPulsing ? 'visible' : ''} ${inkPillCollapsed ? 'drawing' : ''} ${inkPulsing ? 'pulsing' : ''}`}
-          style={inkLevel <= 0 ? { background: 'rgba(255, 59, 48, 0.6)' } : undefined}
-        >
-          <div
-            className="ink-track"
-            style={{ backgroundColor: inkLevel <= 0 ? 'transparent' : selectedColor === 'rainbow' ? 'rgba(128,128,128,0.2)' : `${selectedColor}33` }}
-          >
-            <div
-              ref={inkFillRef}
-              className="ink-fill"
-              style={{
-                height: `${(inkLevel / tierRef.current.maxInk) * 100}%`, // Initial/fallback
-                ...(selectedColor === 'rainbow' ? {
-                  background: rainbowColor,
-                  boxShadow: `0 0 10px ${rainbowColor}`,
-                } : {
-                  background: selectedColor,
-                  boxShadow: `0 0 10px ${selectedColor}80`,
-                }),
-              }}
-            />
-          </div>
-          <div className="ink-icon">
-            <svg viewBox="0 0 24 24" fill="rgba(255, 255, 255, 0.5)" stroke="none" width="16" height="16">
-              <path d="M12 22C17 22 20 18 20 14C20 9 12 2 12 2C12 2 4 9 4 14C4 18 7 22 12 22Z" />
-            </svg>
-          </div>
-        </div>
-        </div>
-
         {/* iOS-inspired Bottom Toolbar */}
         <div ref={toolbarRef} className="toolbar">
           {/* Back/Forward Buttons + Pens */}
@@ -1679,7 +1002,7 @@ function App({ panorama }: { panorama: Panorama }) {
               <button
                 className={`pen-btn pencil ${activeTool === 'pencil' ? 'active' : ''}`}
                 aria-label="Pencil"
-                onClick={() => handleSetActiveTool('pencil')}
+                onClick={() => setActiveTool('pencil')}
               >
                 <svg className="pen-tip" viewBox="36 0 66 390" xmlns="http://www.w3.org/2000/svg">
                   <defs>
@@ -1688,14 +1011,14 @@ function App({ panorama }: { panorama: Panorama }) {
                     </mask>
                   </defs>
                   <image href={toolBase('pencil')} x="0" y="0" width="138" height="390" />
-                  <rect x="0" y="0" width="138" height="390" fill={pencilColor === 'rainbow' ? rainbowColor : pencilColor} mask="url(#pencil-tip-mask)" />
+                  <rect x="0" y="0" width="138" height="390" fill={pencilColor} mask="url(#pencil-tip-mask)" />
                   <image href="/tools/pencil-tip-contour.png" x="0" y="0" width="138" height="390" />
                 </svg>
               </button>
               <button
                 className={`pen-btn marker ${activeTool === 'marker' ? 'active' : ''}`}
                 aria-label="Marker"
-                onClick={() => handleSetActiveTool('marker')}
+                onClick={() => setActiveTool('marker')}
               >
                 <svg className="pen-tip" viewBox="36 0 66 390" xmlns="http://www.w3.org/2000/svg">
                   <defs>
@@ -1704,14 +1027,14 @@ function App({ panorama }: { panorama: Panorama }) {
                     </mask>
                   </defs>
                   <image href={toolBase('marker')} x="0" y="0" width="138" height="390" />
-                  <rect x="0" y="0" width="138" height="390" fill={markerColor === 'rainbow' ? rainbowColor : markerColor} mask="url(#marker-tip-mask)" />
+                  <rect x="0" y="0" width="138" height="390" fill={markerColor} mask="url(#marker-tip-mask)" />
                   <image href="/tools/marker-tip-contour.png" x="0" y="0" width="138" height="390" />
                 </svg>
               </button>
               <button
                 className={`pen-btn eraser ${activeTool === 'eraser' ? 'active' : ''}`}
                 aria-label="Eraser"
-                onClick={() => handleSetActiveTool('eraser')}
+                onClick={() => setActiveTool('eraser')}
               >
                 {DARK_UI ? (
                   <svg className="pen-tip" viewBox="36 0 66 390" xmlns="http://www.w3.org/2000/svg">
@@ -1756,8 +1079,8 @@ function App({ panorama }: { panorama: Panorama }) {
                 )}
               </button>
               <button
-                className={`pen-btn crayon ${activeTool === 'crayon' ? 'active' : ''} ${!tierRef.current.isPlus ? 'premium-locked' : ''}`}
-                onClick={() => tierRef.current.isPlus ? handleSetActiveTool('crayon') : setShowPlusSheet(true)}
+                className={`pen-btn crayon ${activeTool === 'crayon' ? 'active' : ''}`}
+                onClick={() => setActiveTool('crayon')}
               >
                 <svg className="pen-tip" viewBox="36 0 66 390" xmlns="http://www.w3.org/2000/svg">
                   <defs>
@@ -1766,22 +1089,22 @@ function App({ panorama }: { panorama: Panorama }) {
                     </mask>
                   </defs>
                   <image href={toolBase('crayon')} x="0" y="0" width="138" height="390" />
-                  <rect x="0" y="0" width="138" height="390" fill={crayonColor === 'rainbow' ? rainbowColor : crayonColor} mask="url(#crayon-tip-mask)" />
+                  <rect x="0" y="0" width="138" height="390" fill={crayonColor} mask="url(#crayon-tip-mask)" />
                   <image href="/tools/crayon-tip-contour.png" x="0" y="0" width="138" height="390" />
                 </svg>
               </button>
               <button
-                className={`pen-btn fountainPen ${activeTool === 'fountainPen' ? 'active' : ''} ${!tierRef.current.isPlus ? 'premium-locked' : ''}`}
-                onClick={() => tierRef.current.isPlus ? handleSetActiveTool('fountainPen') : setShowPlusSheet(true)}
+                className={`pen-btn fountainPen ${activeTool === 'fountainPen' ? 'active' : ''}`}
+                onClick={() => setActiveTool('fountainPen')}
               >
                 <svg className="pen-tip" viewBox="36 0 66 318" xmlns="http://www.w3.org/2000/svg">
                   <image href={toolBase('fountainpen')} x="0" y="0" width="138" height="318" />
-                  <rect x="36" y="165" width="66" height="7" fill={fountainPenColor === 'rainbow' ? rainbowColor : fountainPenColor} />
+                  <rect x="36" y="165" width="66" height="7" fill={fountainPenColor} />
                 </svg>
               </button>
               <button
-                className={`pen-btn watercolor ${activeTool === 'watercolor' ? 'active' : ''} ${!tierRef.current.isPlus ? 'premium-locked' : ''}`}
-                onClick={() => tierRef.current.isPlus ? handleSetActiveTool('watercolor') : setShowPlusSheet(true)}
+                className={`pen-btn watercolor ${activeTool === 'watercolor' ? 'active' : ''}`}
+                onClick={() => setActiveTool('watercolor')}
               >
                 <svg className="pen-tip" viewBox="36 0 66 318" xmlns="http://www.w3.org/2000/svg">
                   <defs>
@@ -1790,7 +1113,7 @@ function App({ panorama }: { panorama: Panorama }) {
                     </mask>
                   </defs>
                   <image href={toolBase('watercolor')} x="0" y="0" width="138" height="318" />
-                  <rect x="0" y="0" width="138" height="318" fill={watercolorColor === 'rainbow' ? rainbowColor : watercolorColor} mask="url(#watercolor-tip-mask)" />
+                  <rect x="0" y="0" width="138" height="318" fill={watercolorColor} mask="url(#watercolor-tip-mask)" />
                   <image href="/tools/watercolor-tip-contour.png" x="0" y="0" width="138" height="318" />
                 </svg>
               </button>
@@ -1829,390 +1152,6 @@ function App({ panorama }: { panorama: Panorama }) {
           ))}
         </div>
       </div>}
-
-      {/* Report / Admin Delete Buttons */}
-      {reportBtnMounted && (
-        <div
-          className={`report-btn ${reportBtnShow ? 'report-btn-enter' : 'report-btn-exit'}`}
-          style={{
-            left: reportBtnPos.x,
-            top: reportBtnPos.y,
-            visibility: reportBtnPos.visible ? 'visible' : 'hidden',
-          }}
-        >
-          <button
-            style={{ all: 'unset', cursor: 'pointer', borderRadius: 999, padding: '6px 12px', background: isLiked ? 'rgba(0,122,255,0.12)' : 'transparent', display: 'flex', alignItems: 'center', gap: 5, color: isLiked ? '#007AFF' : '#8e8e93', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.2s' }}
-            onClick={() => {
-              if (likeStatus !== 'idle' || !drawingOverlayRef.current || !reportTarget?.authorDeviceId) return;
-              const currentImageId = drawingOverlayRef.current.getImageId();
-              if (!currentImageId) return;
-              const authorId = reportTarget.authorDeviceId;
-              setLikeStatus('toggling');
-              const newLiked = !isLiked;
-              setIsLiked(newLiked);
-              (newLiked
-                ? supabase.from('likes').insert({ image_id: currentImageId, device_id: deviceId, author_device_id: authorId })
-                : supabase.from('likes').delete().eq('image_id', currentImageId).eq('device_id', deviceId).eq('author_device_id', authorId)
-              ).then(() => {
-                setLikeStatus('idle');
-                if (newLiked && drawingOverlayRef.current) {
-                  drawingOverlayRef.current.captureScreenshotForStar(reportTarget?.authorDeviceId);
-                }
-                setTimeout(() => {
-                  setReportTarget(null);
-                  drawingOverlayRef.current?.clearSelection();
-                }, 600);
-              });
-            }}
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill={isLiked ? '#007AFF' : 'none'} stroke={isLiked ? '#007AFF' : '#8e8e93'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transition: 'all 0.2s' }}>
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-            {isLiked ? 'Starred' : 'Star'}
-          </button>
-          <button
-            style={{ all: 'unset', cursor: 'pointer', borderRadius: 999, padding: '6px 12px', background: reportStatus === 'done' ? 'rgba(52,199,89,0.12)' : 'transparent', display: 'flex', alignItems: 'center', gap: 5, color: reportStatus === 'done' ? '#34C759' : '#FF3B30', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'all 0.2s' }}
-            onClick={() => {
-              if (reportStatus !== 'idle' || !drawingOverlayRef.current) return;
-              setReportStatus('sending');
-              const currentImageId = drawingOverlayRef.current.getImageId();
-              // Remove star if it was starred
-              if (isLiked && currentImageId && reportTarget?.authorDeviceId) {
-                setIsLiked(false);
-                supabase.from('likes').delete().eq('image_id', currentImageId).eq('device_id', deviceId).eq('author_device_id', reportTarget.authorDeviceId);
-              }
-              drawingOverlayRef.current.reportStrokes(reportTarget!.strokeIds).then(() => {
-                setReportStatus('done');
-                setTimeout(() => {
-                  setReportTarget(null);
-                  setReportStatus('idle');
-                }, 1500);
-              });
-            }}
-          >
-            {reportStatus === 'done' ? (
-              <>
-                <svg viewBox="0 0 24 24" fill="none" stroke="#34C759" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                Reported
-              </>
-            ) : (
-              <>
-                <svg viewBox="0 0 24 24" fill="none" stroke={reportStatus === 'sending' ? '#ccc' : '#FF3B30'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14" style={{ transition: 'all 0.2s' }}>
-                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-                  <line x1="4" y1="22" x2="4" y2="15" />
-                </svg>
-                {reportStatus === 'sending' ? 'Sending...' : 'Report'}
-              </>
-            )}
-          </button>
-          {IS_ADMIN && reportStatus === 'idle' && (
-            <button
-              style={{ all: 'unset', cursor: 'pointer', borderRadius: 999, padding: '6px 12px', background: 'transparent', display: 'flex', alignItems: 'center', gap: 5, color: DARK_UI ? '#fff' : '#1c1c1e', fontSize: 13, fontWeight: 600, fontFamily: 'inherit' }}
-              onClick={() => {
-                if (!drawingOverlayRef.current) return;
-                setReportStatus('sending');
-                const authorDid = reportTarget!.authorDeviceId;
-                const imgId = drawingOverlayRef.current.getImageId();
-                drawingOverlayRef.current.adminDeleteStrokes(reportTarget!.strokeIds).then(() => {
-                  // Also delete the screenshot for this drawing
-                  if (imgId && authorDid) {
-                    supabase.from('screenshots').delete().eq('image_id', imgId).eq('device_id', authorDid);
-                  } else if (imgId) {
-                    supabase.from('screenshots').delete().eq('image_id', imgId).eq('device_id', 'legacy');
-                  }
-                  setReportStatus('done');
-                  setTimeout(() => {
-                    setReportTarget(null);
-                    setReportStatus('idle');
-                  }, 1500);
-                });
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="#1c1c1e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-              Delete
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Drawing interaction hint popover */}
-      {drawingHint && (
-        <div
-          style={{
-            position: 'fixed',
-            left: drawingHint.x,
-            top: drawingHint.y - 120,
-            transform: 'translateX(-50%)',
-            zIndex: 10000,
-            pointerEvents: 'none',
-            opacity: drawingHintShow ? 1 : 0,
-            transition: 'opacity 0.3s ease',
-          }}
-        >
-          <div style={{
-            background: 'rgba(0,0,0,0.75)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            borderRadius: 10,
-            padding: '8px 14px',
-            color: '#fff',
-            fontSize: 13,
-            fontWeight: 500,
-            fontFamily: "-apple-system, 'SF Pro Text', system-ui, sans-serif",
-            whiteSpace: 'nowrap',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-          }}>
-            {('ontouchstart' in window) ? 'Hold on a drawing to star or report' : 'Double-click a drawing to star or report'}
-          </div>
-          {/* Arrow pointing down */}
-          <div style={{
-            width: 0,
-            height: 0,
-            borderLeft: '8px solid transparent',
-            borderRight: '8px solid transparent',
-            borderTop: '8px solid rgba(0,0,0,0.75)',
-            margin: '0 auto',
-          }} />
-        </div>
-      )}
-
-      {/* Plus Subscription Bottom Sheet */}
-      {(showPlusSheet || isPlusSheetClosing) && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999 }}>
-          <div
-            style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', animation: isPlusSheetClosing ? 'plusSheetScrimOut 0.3s forwards' : 'plusSheetScrimIn 0.3s forwards' }}
-            onClick={() => {
-              setIsPlusSheetClosing(true);
-              setTimeout(() => { setShowPlusSheet(false); setIsPlusSheetClosing(false); }, 300);
-            }}
-          />
-          <div
-            className={`sheet-dialog ${isPlusSheetClosing ? 'sheet-leaving' : 'sheet-entering'}`}
-            style={{
-            position: 'absolute',
-            bottom: 0, left: 0, right: 0,
-            maxWidth: '420px',
-            marginLeft: 'auto',
-            marginRight: 'auto',
-            borderRadius: '32px 32px 0 0',
-            background: 'rgba(255,255,255,0.92)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-            paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-            animation: isPlusSheetClosing ? 'plusSheetSlideDown 0.3s cubic-bezier(0.2,0.8,0.2,1) forwards' : 'plusSheetSlideUp 0.35s cubic-bezier(0.2,0.8,0.2,1) forwards',
-            fontFamily: "-apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif",
-            overflow: 'hidden',
-          }}>
-            <div className="sheet-drag-handle" style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'rgba(0,0,0,0.12)', margin: '6px auto 0' }} />
-            <button
-              onPointerDown={e => e.stopPropagation()}
-              onClick={() => {
-                setIsPlusSheetClosing(true);
-                setTimeout(() => {
-                  setShowPlusSheet(false);
-                  setIsPlusSheetClosing(false);
-                }, 300);
-              }}
-              style={{
-                position: 'absolute', top: '14px', right: '16px',
-                width: '28px', height: '28px', borderRadius: '50%',
-                background: 'rgba(118,118,128,0.12)', border: 'none',
-                cursor: 'pointer', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', padding: 0,
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round">
-                <line x1="1" y1="1" x2="11" y2="11" />
-                <line x1="11" y1="1" x2="1" y2="11" />
-              </svg>
-            </button>
-
-            <div style={{ padding: '16px 24px 32px' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-                <svg width="120" height="120" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'hidden' }}>
-                  <defs>
-                    <clipPath id="splat-clip-app">
-                      <path d="M438.024,210.133c0,7.488,6.08,13.551,13.551,13.551c7.488,0,13.569-6.063,13.569-13.551c0-7.479-6.081-13.552-13.569-13.552C444.104,196.581,438.024,202.654,438.024,210.133z" />
-                      <path d="M400.097,376.503c-5.994,0-10.842,4.856-10.842,10.85c0,5.986,4.848,10.832,10.842,10.832c5.994,0,10.841-4.847,10.841-10.832C410.938,381.359,406.091,376.503,400.097,376.503z" />
-                      <path d="M382.758,415.376c-12.284,0-22.238,9.956-22.238,22.238c0,12.274,9.955,22.229,22.238,22.229c12.283,0,22.238-9.955,22.238-22.229C404.997,425.332,395.041,415.376,382.758,415.376z" />
-                      <circle cx="137.251" cy="426.904" r="16.8" />
-                      <path d="M94.425,359.164c-4.778,0-8.669,3.874-8.669,8.678c0,4.778,3.892,8.66,8.669,8.66c4.796,0,8.67-3.883,8.67-8.66C103.094,363.038,99.22,359.164,94.425,359.164z" />
-                      <path d="M54.865,151.063c6.29,0,11.38-5.1,11.38-11.389c0-6.281-5.09-11.38-11.38-11.38c-6.289,0-11.38,5.099-11.38,11.38C43.485,145.963,48.576,151.063,54.865,151.063z" />
-                      <path d="M165.97,97.952c8.374,0,15.166-6.793,15.166-15.185c0-8.365-6.792-15.158-15.166-15.158s-15.168,6.794-15.168,15.158C150.802,91.158,157.596,97.952,165.97,97.952z" />
-                      <path d="M450.775,300.632c-47.586-16.887-56.968-10.485-80.214-32.515c-5.56-5.255-5.438-22.49,25.47-18.425c15.497,2.042,26.008-6.506,26.008-18.702c0-8.131-9.799-19.433-24.393-13.821c-21.126,8.131-34.834-1.094-37.388-11.38c-3.25-13.004,0.434-27.832,54.814-54.996c66.646-33.332,28.423-93.983-23.924-36.859c-23.194,25.296-34.14,35.764-49.584,43.895c-13.864,7.288-30.49-0.27-17.895-17.069c4.882-6.507,13.17-11.527,15.445-19.511c3.249-11.38-6.324-21.952-14.628-21.952c-8.304,0-18.694,4.874-21.943,17.07c-4.882,22.359-17.322,21.24-23.194,14.785c-11.241-12.318-7.193-26.686-5.264-48.924c2.276-26.121,17.738-86.443-29.709-81.995c-22.88,2.146-29.639,23.715-22.238,62.267c9.208,47.856-4.725,81.257-19.597,88.007c-17.878,8.13-26.946,5.046-65.029-21.126c-20.24-13.926-42.584-1.703-47.152,14.628c-4.031,14.385,7.332,31.768,24.393,37.396c26.286,8.678,37.944,10.693,50.14,17.33c11.918,6.507,13.412,22.282,1.511,36.554c-11.918,14.282-42.705,2.468-88.224-0.782c-78.685-5.611-60.999,81.43,12.996,55.831c42.27-14.637,60.147-11.389,67.479-2.441c10.112,12.344,3.162,29.031-16.54,40.915c-62.858,37.944,7.61,85.078,33.618,32.515c10.876-21.961,23.385-28.71,35.756-23.846c10.094,3.979,23.02,39.204,8.409,86.72C206.885,466.473,207.771,512,238.33,512c28.563,0,33.028-42.539,28.164-88.875c-1.808-17.339-0.47-44.207,13.012-50.948c10.842-5.421,27.781-11.458,39.283,12.457c10.58,21.951,33.34,18.693,42.287,6.506c6.532-8.921,9.851-28.71-16.157-38.969c-30.995-12.249-19.615-45.58,3.961-42.323c26.026,3.588,43.868,13.17,74.794,39.569C466.829,386.233,522.234,325.989,450.775,300.632z" />
-                    </clipPath>
-                    <linearGradient id="rainbow-app" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse" spreadMethod="repeat">
-                      <stop offset="0%" stopColor="#FF3B30" />
-                      <stop offset="7%" stopColor="#FF6A1E" />
-                      <stop offset="14%" stopColor="#FF9500" />
-                      <stop offset="21%" stopColor="#FFB300" />
-                      <stop offset="28%" stopColor="#FFCC00" />
-                      <stop offset="35%" stopColor="#9ACD32" />
-                      <stop offset="42%" stopColor="#34C759" />
-                      <stop offset="50%" stopColor="#1AA3A3" />
-                      <stop offset="57%" stopColor="#007AFF" />
-                      <stop offset="64%" stopColor="#2C68EA" />
-                      <stop offset="71%" stopColor="#5856D6" />
-                      <stop offset="78%" stopColor="#8454DA" />
-                      <stop offset="85%" stopColor="#AF52DE" />
-                      <stop offset="92%" stopColor="#D946A8" />
-                      <stop offset="100%" stopColor="#FF3B30" />
-                    </linearGradient>
-                  </defs>
-                  <g clipPath="url(#splat-clip-app)">
-                    <rect x="-512" y="-512" width="1536" height="1536" fill="url(#rainbow-app)" style={{ animation: 'rainbowSlide 4s linear infinite' }} />
-                  </g>
-                </svg>
-              </div>
-              <h2 style={{ margin: '0 0 6px', fontSize: '20px', fontWeight: 700, color: '#1c1c1e' }}><span style={{ display: 'inline-block', background: 'rgba(118,118,128,0.12)', color: '#3c3c43', fontSize: '13px', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', verticalAlign: 'middle', letterSpacing: '0.3px' }}>Plus</span></h2>
-              <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#8e8e93', lineHeight: 1.5 }}>
-                Exclusive tools, more ink, and rainbow color.
-              </p>
-              <div style={{ background: 'rgba(118,118,128,0.08)', borderRadius: '14px', padding: '4px 0', marginBottom: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                      position: 'relative', overflow: 'hidden',
-                    }}>
-                      <div style={{
-                        position: 'absolute', inset: -1, borderRadius: '50%',
-                        background: `conic-gradient(#ff3b30, #ff6a1e, #ff9500, #ffb300, #ffcc00, #9acd32, #34c759, #1aa3a3, #007aff, #2c68ea, #5856d6, #8454da, #af52de, #d946a8, #ff3b30), linear-gradient(135deg, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6, #af52de, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6, #af52de, #ff3b30)`,
-                        backgroundSize: '100% 100%, 500% 500%',
-                        backgroundBlendMode: 'overlay',
-                        animation: 'rainbowFlow 6s ease infinite',
-                        filter: 'blur(0.5px)',
-                      }} />
-                    </div>
-                    <span style={{
-                      fontSize: '15px',
-                      background: 'linear-gradient(135deg, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6, #af52de, #ff3b30, #ff9500, #ffcc00, #34c759, #007aff, #5856d6, #af52de, #ff3b30)',
-                      backgroundSize: '500% 500%',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      backgroundClip: 'text',
-                      animation: 'rainbowTextFlow 6s ease infinite',
-                    }}>Rainbow color</span>
-                  </div>
-                </div>
-                <div style={{ height: '1px', background: 'rgba(60,60,67,0.1)', marginLeft: '41px' }} />
-                {/* Crayon */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '11px 11px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(118,118,128,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                      <svg viewBox="36 0 66 390" width="18" height="50" xmlns="http://www.w3.org/2000/svg" style={{ marginTop: 28 }}>
-                        <defs>
-                          <mask id="plus-crayon-mask-app" style={{ maskType: 'alpha' } as any}>
-                            <image href="/tools/crayon-tip.png" x="0" y="0" width="138" height="390" />
-                          </mask>
-                        </defs>
-                        <image href="/tools/crayon-base.png" x="0" y="0" width="138" height="390" />
-                        <rect x="0" y="0" width="138" height="390" fill="#FF9500" mask="url(#plus-crayon-mask-app)" />
-                        <image href="/tools/crayon-tip-contour.png" x="0" y="0" width="138" height="390" />
-                      </svg>
-                    </div>
-                    <span style={{ fontSize: '15px', color: '#1c1c1e' }}>Crayon</span>
-                  </div>
-                </div>
-                <div style={{ height: '1px', background: 'rgba(60,60,67,0.1)', marginLeft: '41px' }} />
-                {/* Fountain Pen */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '11px 11px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(118,118,128,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                      <svg viewBox="36 0 66 318" width="18" height="42" xmlns="http://www.w3.org/2000/svg" style={{ marginTop: 18 }}>
-                        <image href="/tools/fountainpen-base.png" x="0" y="0" width="138" height="318" />
-                        <rect x="36" y="165" width="66" height="7" fill="#007AFF" />
-                      </svg>
-                    </div>
-                    <span style={{ fontSize: '15px', color: '#1c1c1e' }}>Fountain Pen</span>
-                  </div>
-                </div>
-                <div style={{ height: '1px', background: 'rgba(60,60,67,0.1)', marginLeft: '41px' }} />
-                {/* Watercolor */}
-                <div style={{ display: 'flex', alignItems: 'center', padding: '11px 11px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(118,118,128,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                      <svg viewBox="36 0 66 318" width="18" height="42" xmlns="http://www.w3.org/2000/svg" style={{ marginTop: 18 }}>
-                        <defs>
-                          <mask id="plus-watercolor-mask-app" style={{ maskType: 'alpha' } as any}>
-                            <image href="/tools/watercolor-tip.png" x="0" y="0" width="138" height="318" />
-                          </mask>
-                        </defs>
-                        <image href="/tools/watercolor-base.png" x="0" y="0" width="138" height="318" />
-                        <rect x="0" y="0" width="138" height="318" fill="#34C759" mask="url(#plus-watercolor-mask-app)" />
-                        <image href="/tools/watercolor-tip-contour.png" x="0" y="0" width="138" height="318" />
-                      </svg>
-                    </div>
-                    <span style={{ fontSize: '15px', color: '#1c1c1e' }}>Watercolor</span>
-                  </div>
-                </div>
-                <div style={{ height: '1px', background: 'rgba(60,60,67,0.1)', marginLeft: '41px' }} />
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <svg viewBox="0 0 24 24" fill="#1c1c1e" stroke="none" width="15" height="15" style={{ flexShrink: 0 }}>
-                      <path d="M12 22C17 22 20 18 20 14C20 9 12 2 12 2C12 2 4 9 4 14C4 18 7 22 12 22Z" />
-                    </svg>
-                    <span style={{ fontSize: '15px', color: '#1c1c1e' }}>10x Ink capacity</span>
-                  </div>
-                  <span style={{ fontSize: '15px', fontWeight: 600 }}><span style={{ color: '#8e8e93' }}>150</span> <span style={{ color: '#8e8e93' }}>→</span> <span style={{ color: '#34c759' }}>1,500</span></span>
-                </div>
-                <div style={{ height: '1px', background: 'rgba(60,60,67,0.1)', marginLeft: '41px' }} />
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <svg viewBox="0 0 24 24" fill="#1c1c1e" stroke="#1c1c1e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" style={{ flexShrink: 0 }}>
-                      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                    </svg>
-                    <span style={{ fontSize: '15px', color: '#1c1c1e' }}>10x Refill speed</span>
-                  </div>
-                  <span style={{ fontSize: '15px', fontWeight: 600, color: '#34c759' }}>10x</span>
-                </div>
-              </div>
-              <button
-                onClick={async () => {
-                  const url = await createCheckoutSession();
-                  if (url) window.location.href = url;
-                }}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  background: '#007aff',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '14px',
-                  fontWeight: 600,
-                  fontSize: '16px',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  transition: 'transform 0.2s ease',
-                }}
-                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.02)'}
-                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-              >
-                Unlock for $3.99
-              </button>
-              <div style={{ textAlign: 'center', fontSize: '11px', color: '#8e8e93', marginTop: '8px' }}>
-                One-time purchase. Supports development & moderation.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Ink Depleted Toast */}
-      <div className={`ink-toast ${inkToastVisible ? 'visible' : ''}`}>
-        <div className="ink-toast-icon">
-          <PiDropSlashFill size={20} color="#ff3b30" />
-        </div>
-        <div className="ink-toast-text">
-          <div className="ink-toast-title">Out of ink — refills in {getRegenTimeString()}</div>
-        </div>
-      </div>
 
     </div>
   );

@@ -683,7 +683,7 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
 @media (hover: hover) {
   .app--dark .sidebar-icon-btn:not(:disabled):hover { background: rgba(255, 255, 255, 0.1); }
 }
-/* the PencilKit eraser image is drawn like the other pens (same size + travel) */
+/* the eraser image is drawn like the other pens (same size + travel) */
 .app--dark .pen-btn.eraser .pen-tip { width: 48px; height: 130px; }
 .app--dark .pen-btn.eraser { transform: translateY(70px); }
 .app--dark .pen-btn.eraser.active { transform: translateY(50px); }
@@ -783,7 +783,7 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
     -webkit-backdrop-filter: blur(20px);
     border-radius: 50%;
   }
-  /* the photo credit rests just above the drawing tools (--toolbar-h is measured in App.tsx) */
+  /* the photo credit rests just above the drawing tools (--toolbar-h is measured in Toolbar.tsx) */
   .panorama-credit { bottom: calc(var(--toolbar-h, 106px) + 6px); right: 14px; }
   /* X mirrors the undo button's 14px inset on the other side */
   .view-close { right: calc(14px + env(safe-area-inset-right, 0px)) !important; }
@@ -807,7 +807,7 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   .toolbar::before, .app--dark .toolbar::before { display: none; }
   /* Undo/redo live inside the top of the panel: the panel gets ~48px of extra room up top
      (local padding-left = screen top), and the buttons are placed over it — centred in the
-     110px-wide panel, from its measured height (--toolbar-h, set in App.tsx). */
+     110px-wide panel, from its measured height (--toolbar-h, set in Toolbar.tsx). */
   .toolbar { padding-left: calc(12px + 48px / var(--toolbar-scale)); }
   .undo-redo {
     top: calc(50vh - var(--toolbar-h, 400px) / 2 + 12px) !important;

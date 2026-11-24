@@ -31,7 +31,7 @@
   <script>
     // iOS 26 home-screen apps: the page is told the screen is shorter than it is by exactly the status
     // bar (793 of 852 pt), which leaves a black strip at the bottom. When the numbers match that bug
-    // exactly, size the app to the real screen (html.short-screen + --screen-h, see App.css).
+    // exactly, size the app to the real screen (html.short-screen + --screen-h, see view.css).
     (function () {
       if (navigator.standalone !== true) return;
       var de = document.documentElement, fixed = 0;

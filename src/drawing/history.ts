@@ -86,6 +86,7 @@ export class History {
       if (!undo && !isEraseEdit(entry)) void this.room.share(entry); // back for everyone, with the same id
       this.scene.redraw();
     } while (group !== undefined && from[from.length - 1]?.strokeGroup === group);
+    this.onChange?.();
   }
 
   /** Put an erase gesture's strokes back to before (undo) or after (redo) it. */

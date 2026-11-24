@@ -1,0 +1,156 @@
+/** Buttons and messages over the photo. */
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import mouseRightClick from '../assets/mouse-right-click.svg';
+import touchAndScroll from '../assets/touch-and-scroll.svg';
+import CloseIcon from '../components/CloseIcon';
+import type { Panorama } from '../pool/catalog';
+import { DARK_UI } from '../theme';
+
+function HistoryButton({ label, enabled, onClick, children }: { label: string; enabled: boolean; onClick(): void; children: ReactNode }) {
+  return (
+    <button
+      aria-label={label}
+      onClick={onClick}
+      disabled={!enabled}
+      className="sidebar-icon-btn"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '40px',
+        height: '38px',
+        border: 'none',
+        cursor: enabled ? 'pointer' : 'default',
+        opacity: enabled ? 1 : 0.3,
+        transition: 'opacity 0.2s ease',
+        padding: 0,
+        color: DARK_UI ? '#fff' : '#1c1c1e',
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+    </button>
+  );
+}
+
+/** On desktop these sit inside the top of the tool panel (see view.css). */
+export function UndoRedo({ canUndo, canRedo, onUndo, onRedo }: { canUndo: boolean; canRedo: boolean; onUndo(): void; onRedo(): void }) {
+  return (
+    <div
+      className="undo-redo"
+      style={{
+        position: 'absolute',
+        top: 'calc(20px + env(safe-area-inset-top, 0px))',
+        left: 'calc(14px + env(safe-area-inset-left, 0px))',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0,
+        zIndex: 21,
+      }}
+    >
+      <HistoryButton label="Undo" enabled={canUndo} onClick={onUndo}>
+        <path d="M9 14 4 9l5-5" />
+        <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+      </HistoryButton>
+      <HistoryButton label="Redo" enabled={canRedo} onClick={onRedo}>
+        <path d="m15 14 5-5-5-5" />
+        <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13" />
+      </HistoryButton>
+    </div>
+  );
+}
+
+export function CloseButton({ onClick }: { onClick(): void }) {
+  return (
+    <button
+      className="view-close"
+      onClick={onClick}
+      aria-label="Close"
+      title="Close"
+      style={{
+        pointerEvents: 'auto',
+        position: 'absolute',
+        top: 'calc(20px + env(safe-area-inset-top, 0px))',
+        right: 'calc(20px + env(safe-area-inset-right, 0px))',
+        width: '40px',
+        height: '40px',
+        padding: 0,
+        // Same frosted, slightly see-through grey + hairline + soft shadow as the left sidebar
+        background: DARK_UI ? 'rgba(30, 31, 29, 0.76)' : 'rgba(226, 226, 231, 0.78)',
+        backdropFilter: DARK_UI ? 'blur(30px) saturate(1.5)' : 'blur(18px) saturate(1.3)',
+        WebkitBackdropFilter: DARK_UI ? 'blur(30px) saturate(1.5)' : 'blur(18px) saturate(1.3)',
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: DARK_UI ? '#fff' : '#1c1c1e',
+        boxShadow: DARK_UI ? '0 0 0 0.5px rgba(255,255,255,0.1), 0 6px 20px rgba(0,0,0,0.25)' : '0 0 0 0.5px rgba(0,0,0,0.1), 0 6px 20px rgba(0,0,0,0.08)',
+        zIndex: 20,
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'transform 0.2s ease',
+      }}
+      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
+      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+    >
+      <CloseIcon />
+    </button>
+  );
+}
+
+/**
+ * Credit for photos that aren't CC0: the shortest complete form, like a map's © line. The name links
+ * to the source page, the license name to the exact license version; that the photo was changed
+ * (resized, drawn on) is stated in the hover text and screen-reader label.
+ */
+export function PhotoCredit({ panorama: p }: { panorama: Panorama }) {
+  if (p.license === 'CC0-1.0') return null;
+  return (
+    <aside className="panorama-credit" aria-label={`Photo by ${p.author}, edited, ${p.license}`}>
+      <a href={p.sourceUrl} target="_blank" rel="noreferrer" title="Original photo (this one is resized and drawn on)">© {p.author}</a>
+      <a href={p.licenseUrl} target="_blank" rel="noreferrer" title={p.license}>{p.license.replace(/[\s-]\d[\d.]*$/, '')}</a>
+    </aside>
+  );
+}
+
+/** First visit: how to look around. */
+export function Tutorial({ fading }: { fading: boolean }) {
+  const touch = 'ontouchstart' in window, size = touch ? 166 : 200;
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'rgba(0,0,0,0.6)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        opacity: fading ? 0 : 1,
+        transition: 'opacity 0.4s ease',
+        pointerEvents: 'none',
+      }}
+    >
+      <img src={touch ? touchAndScroll : mouseRightClick} alt="" width={size} height={size} style={{ filter: 'invert(1)', opacity: 0.9 }} />
+      <p style={{ color: 'white', fontSize: '18px', fontWeight: 600, marginTop: '16px', textAlign: 'center', lineHeight: 1.5 }}>
+        {touch ? 'Use two fingers to look around' : 'Right-click and drag to look around'}
+      </p>
+    </div>
+  );
+}
+
+/** Shown when loading takes a moment. */
+export function LoadingSpinner() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setShow(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
+  return show && (
+    <div className="loading-overlay" role="status" aria-label="Loading panorama">
+      <div className="spinner">
+        {Array.from({ length: 8 }, (_, i) => <div key={i} className="spinner-blade" style={{ '--i': i } as CSSProperties} />)}
+      </div>
+    </div>
+  );
+}

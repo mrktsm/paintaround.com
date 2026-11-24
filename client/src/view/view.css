@@ -98,13 +98,6 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   white-space: nowrap;
   pointer-events: none;
 }
-.view-hint {
-  top: calc(72px + env(safe-area-inset-top, 0px));
-  right: auto;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-}
 
 /* Reveal the panorama immediately when its image is ready. */
 .viewer-container div[class^="mapillary"] {
@@ -128,7 +121,7 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
 }
 
 /* Drawing tools (eraser included) show their own size circle, wrapped onto the surface, so hide the
-   system cursor. With no pen picked, or Space or Shift held, dragging moves the view. */
+   system cursor. While Space or Shift is held, dragging moves the view. */
 .viewer-container,
 .viewer-container * {
   cursor: grab !important;

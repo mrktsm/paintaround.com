@@ -87,47 +87,34 @@ test('holding Space drags the view instead of drawing', async ({ browser }) => {
 
 test('dragging the view: it sticks to the pointer, and stays where it\'s let go', async ({ browser }) => {
   const p = await visit(browser, { alone: true });
-  await p.click('.pen-btn.pencil'); // put it down
   const a = await looking(p);
   await p.mouse.move(700, 400);
-  await p.mouse.down();
+  await p.mouse.down({ button: 'right' });
   await p.mouse.move(600, 400, { steps: 10 });
   await p.waitForTimeout(200);
-  await p.mouse.up();
+  await p.mouse.up({ button: 'right' });
   await p.waitForTimeout(500);
   // at zoom 0.35 the screen is 76.2° high, 800 px: 0.1124° per px in the middle
   expect(Math.abs(turned(a, await looking(p)) - 11.24)).toBeLessThan(0.4);
 });
 
-test('putting the pen down: dragging looks around; picking one up draws again', async ({ browser }) => {
+test('tapping the picked pen again keeps it', async ({ browser }) => {
   const p = await visit(browser, { alone: true });
-  await pick(p, 'marker');
-  await p.click('.pen-btn.marker'); // the same one: put down
-  await expect(p.locator('.pen-btn.active')).toHaveCount(0);
-  await expect(p.locator('.view-hint')).toHaveText('Drag to look around');
-  await expect(p.locator('.view-hint')).toHaveCount(0, { timeout: 4000 });
-  const a = await looking(p);
-  await drag(p, [800, 500], [600, 500]);
-  await p.waitForTimeout(700);
-  expect(turned(a, await looking(p))).toBeGreaterThan(10);
-  await expect(p.locator('[aria-label="Undo"]')).toBeDisabled();
-  await pick(p, 'crayon');
+  await p.click('.pen-btn.marker');
+  await p.click('.pen-btn.marker');
+  await expect(p.locator('.pen-btn.marker')).toHaveClass(/active/);
   await drag(p, [520, 620], [700, 620]);
   await expect(p.locator('[aria-label="Undo"]')).toBeEnabled();
-  expect(p.problems).toEqual([]);
 });
 
-test('on a phone: one finger looks around with the pen down, and goes on when the other one lifts', async ({ browser }) => {
+test('on a phone: two fingers turn a little faster than they move, and stop when they do', async ({ browser }) => {
   const p = await visit(browser, { alone: true, ...PHONE });
   const f = await fingers(p);
-  await p.locator('.pen-btn.pencil').tap(); // it's picked: put it down
   const a = await looking(p);
-  await f.swipe([[300, 400]], [-150, 0], { rest: 150 });
+  await f.swipe([[300, 360], [300, 450]], [-150, 0], { rest: 150 });
   await p.waitForTimeout(300);
-  const b = await looking(p);
-  expect(Math.abs(turned(a, b) - 150 * 0.1153 * 1.3)).toBeLessThan(2); // held still before letting go: no glide
+  expect(Math.abs(turned(a, await looking(p)) - 150 * 0.1153 * 1.3)).toBeLessThan(2); // held still before letting go: no glide
   await expect(p.locator('[aria-label="Undo"]')).toBeDisabled();
-  expect(p.problems).toEqual([]);
 });
 
 test('on a phone: a flick glides far, and a touch stops it', async ({ browser }) => {

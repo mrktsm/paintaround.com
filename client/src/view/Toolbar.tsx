@@ -139,9 +139,8 @@ function usePublishHeight(ref: RefObject<HTMLElement | null>): void {
 }
 
 interface Props {
-  tool: Tool | null;
+  tool: Tool;
   colors: Record<ToolType, string>;
-  /** A pen was tapped (the picked one: put it down). */
   onTool(tool: Tool): void;
   onColor(tool: ToolType, color: string): void;
 }

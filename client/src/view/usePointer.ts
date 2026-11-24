@@ -8,8 +8,7 @@ interface Options {
   container: RefObject<HTMLDivElement | null>;
   viewer: RefObject<Viewer | null>;
   overlay: RefObject<DrawingOverlay | null>;
-  /** Null: the pens are down, and everything looks around. */
-  tool: Tool | null;
+  tool: Tool;
   color: string;
   /** Can be drawn on yet? (Looking around always works.) */
   canDraw: boolean;
@@ -17,8 +16,8 @@ interface Options {
 }
 
 /**
- * Drawing with a mouse, finger or pen. Two fingers, the right button, Shift or Space look around, and so
- * does everything while no pen is picked. Two fingers tapping undo, three redo.
+ * Drawing with a mouse, finger or pen. Two fingers, the right button, Shift or Space look around. Two
+ * fingers tapping undo, three redo.
  */
 export function usePointer(options: Options) {
   const { container } = options;
@@ -99,7 +98,7 @@ class PointerInput {
     }
     const overlay = this.overlay;
     if (!overlay) return;
-    if (!tool || e.button === 1 || e.button === 2 || e.shiftKey || this.keys.has('Space')) {
+    if (e.button === 1 || e.button === 2 || e.shiftKey || this.keys.has('Space')) {
       onLookAround();
       this.look(pos, touch);
       return;
@@ -134,10 +133,8 @@ class PointerInput {
     // the ring under the mouse previews the colour, lit like the stroke; while a button is held the
     // stroke itself is the preview (and the eraser's ring is never filled)
     const mouse = e.pointerType === 'mouse';
-    if (!mouse || !tool || this.keys.has('Space')) overlay.hideBrushCursor();
+    if (!mouse || this.keys.has('Space')) overlay.hideBrushCursor();
     else overlay.updateBrushCursor(pos.x, pos.y, BRUSH_RADIUS[tool], tool !== 'eraser' && e.buttons === 0 ? color : null);
-    if (!tool) return;
-
     const radius = BRUSH_RADIUS[tool], wait = this.waiting;
     if (wait) {
       // far and long enough not to be the first finger of a pinch
@@ -161,7 +158,7 @@ class PointerInput {
   };
 
   readonly up = (e: PointerEvent): void => {
-    const { tool, container } = this.options.current;
+    const { container } = this.options.current;
     e.nativeEvent.stopImmediatePropagation();
     const overlay = this.overlay, camera = this.camera;
     this.pointers.delete(e.pointerId);
@@ -170,9 +167,6 @@ class PointerInput {
     if (camera?.pinching && this.pointers.size < 2) {
       if (this.isTap()) camera.cancel();
       else camera.end();
-      // with no pen picked the finger that's left goes on looking around
-      const [rest] = this.pointers.values();
-      if (rest && !tool) this.look(rest, true);
     }
     if (this.pointers.size > 0) return; // drawing was cancelled when the second finger came
     if (camera?.dragging) camera.end();

@@ -84,7 +84,6 @@ export async function middle(a: Buffer, b: Buffer): Promise<{ x: number; y: numb
 }
 
 export async function pick(page: Page, tool: string): Promise<void> {
-  if (await page.locator(`.pen-btn.${tool}.active`).count()) return; // again would put it down
   await page.click(`.pen-btn.${tool}`);
   await page.waitForTimeout(400);
 }

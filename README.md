@@ -4,10 +4,8 @@
 [![Tests](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=tests&label=tests)](https://github.com/mrktsm/paintaround.com/actions)
 [![Site](https://img.shields.io/website?url=https%3A%2F%2Fpaintaround.com&label=site)](https://paintaround.com)
 [![AGPL-3.0 license](https://img.shields.io/github/license/mrktsm/paintaround.com?label=license)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/mrktsm/paintaround.com?logo=github)](https://github.com/mrktsm/paintaround.com/stargazers)
 
-A map of 360° photos you can step into and paint on. Everyone in a place sees everyone else's strokes as
-they're drawn.
+Draw on 360° photos of real places, together with whoever else is there.
 
 [**Try it live**](https://paintaround.com) · [How it works](#how-it-works) · [Run it](#run-it)
 
@@ -15,26 +13,25 @@ they're drawn.
 
 ## Features
 
-- **Paint that belongs there:** strokes wrap onto the surfaces in the photo, around corners and over
-  cobblestones, and take on its light and shadow.
-- **Live:** others' brushes run in your browser on the same samples, so you watch their strokes grow exactly
-  as they do.
-- **200 places:** zoom the map from whole countries into single squares, or search.
-- **Six tools:** pencil, marker, crayon, fountain pen, watercolor and an eraser, with undo.
-- **Nothing to sign up for:** no accounts and no database. Drawings live in the server's memory.
-- **Moderated:** finished drawings are checked by a vision model, and its mistakes can be undone.
-- **On your phone:** one finger paints, two look around. It installs like an app.
+- Strokes follow the surfaces in the photo and are shaded by its light
+- Other people's strokes and cursors show up live
+- 200 places on a map, with search
+- Pencil, marker, crayon, fountain pen, watercolor, eraser, undo and redo
+- No accounts and no database: drawings are kept in the server's memory until it restarts
+- Finished drawings are checked by a vision model
+- Works on phones (one finger draws, two look around) and can be installed as a PWA
 
 ## How it works
 
-Each place has a depth map and a lighting map, made once. Where you draw, the surface around your stroke is
-unfolded into a flat sheet, the brush paints on that sheet, and a shader folds it back onto the photo, lit
-like everything around it. [Read more](docs/architecture.md), or see
-[how the 3D data is made](pipeline/3d/README.md).
+Each place has a precomputed depth map and lighting map. When you draw, the surface around the stroke is
+unwrapped into a 2D sheet using the depth map. The brush paints on the sheet, and a shader maps it back onto
+the photo and multiplies it by the lighting map.
 
-![The same view four times: the photo, how far away everything is, the light on it, and paint on it](docs/how-it-works.webp)
+![Photo, depth map, lighting map and paint for the same view](docs/how-it-works.webp)
 
-<sub>Top: the photo, and how far away everything is. Bottom: the light on it, and paint that follows both.</sub>
+<sub>Top: photo, depth map. Bottom: lighting map, paint using both.</sub>
+
+More in [docs/architecture.md](docs/architecture.md) and [pipeline/3d](pipeline/3d/README.md).
 
 ## Tech stack
 
@@ -43,7 +40,7 @@ like everything around it. [Read more](docs/architecture.md), or see
 - **Server:** Node, WebSockets, [sharp](https://sharp.pixelplumbing.com)
 - **3D data:** [DA360](https://github.com/Insta360-Research-Team/DA360) for depth,
   [Marigold](https://huggingface.co/prs-eth/marigold-iid-lighting-v1-1) for lighting
-- **CI/CD:** GitHub Actions: checks on every push, and what reaches `main` goes live
+- **CI/CD:** GitHub Actions runs the checks on every push and deploys `main`
 
 ## Run it
 
@@ -59,7 +56,7 @@ npm run dev          # the site, in another: http://localhost:5173
 Strokes are flat until a place has [3D data](pipeline/3d/README.md). The server's settings (moderation,
 alerts) are in [.env.example](.env.example); `node --env-file=.env server/realtime.ts` uses them.
 
-## Work on it
+## Development
 
 ```
 client/     the website

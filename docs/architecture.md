@@ -62,8 +62,8 @@ strokes of the least recently used rooms go.
 
 `server/moderation.ts`. About 20 seconds after someone stops drawing, what they drew is rendered as two
 pictures, the paint alone and on a faded photo, and a vision model decides: allow, hold (it stays but
-isn't shown on the map) or remove. Only that person's paint is in the pictures, so nobody is judged by
-someone else's. Errors mean allow. Removed drawings can be put back for 24 hours, from the server itself:
+isn't shown on the map) or remove. Only that person's paint is in the pictures: with other
+people's in them, harmless drawings next to bad ones got flagged. Errors mean allow. Removed drawings can be put back for 24 hours, from the server itself:
 
 ```sh
 curl localhost:8787/internal/held

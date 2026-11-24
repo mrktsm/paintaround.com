@@ -5,6 +5,9 @@ import { DARK_UI } from '../theme';
 import { ESRI_DATA_CREDIT } from './esriPreviewStyle';
 import { MAP_SOURCE, type MapSource } from './mapStyles';
 
+/** The AGPL asks for this to be offered to everyone using the site. If you run a changed version, link to yours. */
+const SOURCE_CODE = 'https://github.com/mrktsm/paintaround.com';
+
 const CREDITS: Record<MapSource, ReactNode> = {
   esri: ESRI_DATA_CREDIT,
   eox: <><a href="https://cloudless.eox.at" target="_blank" rel="noreferrer">EOxCloudless</a> by <a href="https://eox.at" target="_blank" rel="noreferrer">EOX IT Services GmbH</a> (contains modified Copernicus Sentinel data 2024), <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noreferrer">CC BY-NC-SA 4.0</a>. Overlay rendering © EOX and MapServer.</>,
@@ -48,13 +51,14 @@ export default function MapControls({ map, bearing }: { map: RefObject<Map | nul
             </div>
           )}
           {/* one small line, like Apple Maps' legal links: "© Esri" opens the credits panel above
-              (Esri's required "Powered by Esri" + every source); Privacy and Terms sit beside it */}
+              (Esri's required "Powered by Esri" + every source); Privacy, Terms and the source code sit beside it */}
           <div className="ex-credit">
             <button aria-label="Map credits" aria-expanded={creditOpen} onClick={() => setCreditOpen((v) => !v)}>
               {MAP_SOURCE === 'esri' ? '© Esri' : 'Map data'}
             </button>
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
+            <a href={SOURCE_CODE} target="_blank" rel="noreferrer">Source code</a>
           </div>
         </div>
         <div className="ex-stack">

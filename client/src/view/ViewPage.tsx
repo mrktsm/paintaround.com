@@ -22,7 +22,8 @@ import { useTutorial } from './useTutorial';
 function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
   const navigate = useNavigate();
   const container = useRef<HTMLDivElement>(null);
-  const [tool, setTool] = useState<Tool>('pencil');
+  /** Null: no pen picked, just looking around. */
+  const [tool, setTool] = useState<Tool | null>('pencil');
   const [colors, setColor] = useToolColors();
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const readHistory = useCallback((o: DrawingOverlay) => setHistory({ canUndo: o.canUndo(), canRedo: o.canRedo() }), []);
@@ -31,7 +32,7 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
   const tutorial = useTutorial();
   const pointer = usePointer({
     container, viewer, overlay, tool,
-    color: colors[tool === 'eraser' ? 'pencil' : tool],
+    color: colors[!tool || tool === 'eraser' ? 'pencil' : tool],
     canDraw: isLoaded && isReady && tutorial.state !== 'shown',
     onLookAround: tutorial.dismiss,
   });
@@ -50,7 +51,7 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
     <div className={`app${DARK_UI ? ' app--dark' : ''}`}>
       <div
         ref={container}
-        className={`viewer-container drawing-active ${tool === 'eraser' ? 'tool-eraser' : ''} ${isLoaded ? 'loaded' : ''}`}
+        className={`viewer-container ${tool ? 'drawing-active' : ''} ${isLoaded ? 'loaded' : ''}`}
         style={{
           backgroundImage: loadingPicture,
           backgroundSize: 'cover',
@@ -59,6 +60,7 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
         onPointerDownCapture={pointer.down}
         onPointerMoveCapture={pointer.move}
         onPointerUpCapture={pointer.up}
+        onPointerCancelCapture={pointer.cancel}
         onPointerLeave={pointer.leave}
       />
       <PhotoCredit panorama={panorama} />
@@ -79,7 +81,7 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
           onShare={async () => !!viewer.current && share(await shareLink(viewer.current, panorama.id))}
           onDone={close}
         />
-        <Toolbar tool={tool} colors={colors} onTool={setTool} onColor={setColor} />
+        <Toolbar tool={tool} colors={colors} onTool={t => setTool(now => (now === t ? null : t))} onColor={setColor} />
       </div>
       {!isLoaded && !failed && <LoadingSpinner />}
     </div>

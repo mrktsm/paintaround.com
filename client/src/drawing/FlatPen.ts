@@ -119,6 +119,12 @@ export class FlatPen {
     realtime.send({ t: "stroke_end" });
   }
 
+  cancel(): void {
+    this.current?.tool.dispose();
+    this.current = null;
+    realtime.send({ t: "stroke_end" });
+  }
+
   /** Anything to draw this frame? */
   get busy(): boolean {
     return !!this.current?.ready || this.ended.length + this.settling.length + this.settled.length + this.drops.length + this.splashes.length > 0;

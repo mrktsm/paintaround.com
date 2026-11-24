@@ -139,8 +139,9 @@ function usePublishHeight(ref: RefObject<HTMLElement | null>): void {
 }
 
 interface Props {
-  tool: Tool;
+  tool: Tool | null;
   colors: Record<ToolType, string>;
+  /** A pen was tapped (the picked one: put it down). */
   onTool(tool: Tool): void;
   onColor(tool: ToolType, color: string): void;
 }
@@ -152,24 +153,24 @@ export default function Toolbar({ tool, colors, onTool, onColor }: Props) {
   useSquircle(bar, 9999);
   usePublishHeight(bar);
   const fade = useScrollFade(pens);
-  const erasing = tool === 'eraser';
-  const color = colors[erasing ? 'pencil' : tool];
+  const pen = tool === 'eraser' ? null : tool;
+  const color = colors[pen ?? 'pencil'];
   return (
     <div ref={bar} className="toolbar">
       <div ref={pens} className="nav-pen-group" style={{ maskImage: fade, WebkitMaskImage: fade }}>
         <div className="pen-container">
           {PENS.map(({ tool: t, label, picture }) => (
-            <button key={t} className={`pen-btn ${t} ${tool === t ? 'active' : ''}`} aria-label={label} onClick={() => onTool(t)}>
+            <button key={t} className={`pen-btn ${t} ${tool === t ? 'active' : ''}`} aria-label={label} aria-pressed={tool === t} onClick={e => { onTool(t); if (e.detail) e.currentTarget.blur(); /* Space is for dragging the view */ }}>
               {picture(t === 'eraser' ? '' : colors[t], tool === t)}
             </button>
           ))}
         </div>
       </div>
       <div className="tool-group" style={{ alignSelf: 'flex-end', marginBottom: -6 }}>
-        <div className={`color-grid ${erasing ? 'disabled' : ''}`}>
+        <div className={`color-grid ${pen ? '' : 'disabled'}`}>
           {/* rainbow ring around the tool's colour; opens the picker */}
           <label className="color-option color-picker-swatch" style={{ '--picked': color } as CSSProperties} title="Choose colour">
-            <input type="color" value={color.toLowerCase()} disabled={erasing} onChange={e => { if (!erasing) onColor(tool, e.target.value.toUpperCase()); }} />
+            <input type="color" value={color.toLowerCase()} disabled={!pen} onChange={e => { if (pen) onColor(pen, e.target.value.toUpperCase()); }} />
           </label>
         </div>
       </div>

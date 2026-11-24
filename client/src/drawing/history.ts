@@ -22,6 +22,8 @@ export class History {
   onUndone: ((tex: MarkerTexture) => void) | null = null;
   private done: UndoEntry[] = [];
   private undone: UndoEntry[] = [];
+  /** Cancelled: as if never drawn. */
+  private readonly cancelled = new WeakSet<object>();
   private readonly scene: Scene;
   private readonly strokes: Strokes;
   private readonly room: LiveRoom;
@@ -47,7 +49,17 @@ export class History {
   }
 
   isUndone(tex: MarkerTexture): boolean {
-    return this.undone.includes(tex);
+    return this.cancelled.has(tex) || this.undone.includes(tex);
+  }
+
+  /** Do this; if it added anything, take that back for good. */
+  cancel(finish: () => void): void {
+    const before = this.done.length;
+    finish();
+    if (this.done.length <= before) return;
+    const gone: UndoEntry[] = [];
+    this.step(this.done, gone, true);
+    for (const entry of gone) if (!isEraseEdit(entry)) this.cancelled.add(entry);
   }
 
   /** These strokes can't be undone any more (by their id in the live room). */

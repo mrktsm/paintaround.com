@@ -188,6 +188,17 @@ export class DrawingOverlay {
     else this.flat.end();
   }
 
+  /** The stroke being drawn wasn't meant. */
+  cancelStroke(): void {
+    if (this.surface.active) this.room.history.cancel(() => this.surface.end(this.moved));
+    else this.flat.cancel();
+  }
+
+  /** Nor was the eraser gesture. */
+  cancelErase(): void {
+    this.room.history.cancel(() => this.eraser.finish());
+  }
+
   /** Draw every frame until there's nothing left that changes. */
   private startFrames(): void {
     // claimed before the first frame runs: frames await, and a second loop started meanwhile would

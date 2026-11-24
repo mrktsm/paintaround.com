@@ -120,19 +120,21 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   -webkit-touch-callout: none;
 }
 
-/* Drawing tools (eraser included) show their own size circle, wrapped onto the surface, so
-   hide the system cursor. */
-.viewer-container.drawing-active,
-.viewer-container.drawing-active * {
+/* Drawing tools (eraser included) show their own size circle, wrapped onto the surface, so hide the
+   system cursor. With no pen picked, or Space or Shift held, dragging moves the view. */
+.viewer-container,
+.viewer-container * {
+  cursor: grab !important;
+}
+.viewer-container.drawing-active:not(.can-pan):not(.panning),
+.viewer-container.drawing-active:not(.can-pan):not(.panning) * {
   cursor: none !important;
 }
-
-.viewer-container.drawing-active.panning,
-.viewer-container.drawing-active.panning * {
+.viewer-container.panning,
+.viewer-container.panning * {
   cursor: grabbing !important;
 }
-
-.viewer-container.drawing-active {
+.viewer-container {
   touch-action: none;
 }
 

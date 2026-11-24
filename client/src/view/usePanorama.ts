@@ -10,8 +10,8 @@ import { START_ZOOM } from '../../../shared/startView';
 
 /** Only the photo: the viewer's own controls are replaced by ours. */
 const COMPONENTS = {
-  attribution: false, bearing: false, cache: false, cover: false, direction: false, image: true, keyboard: true, marker: false,
-  pointer: true, popup: false, sequence: false, slider: false, spatial: false, tag: false, zoom: false,
+  attribution: false, bearing: false, cache: false, cover: false, direction: false, image: true, keyboard: false, marker: false,
+  pointer: false, popup: false, sequence: false, slider: false, spatial: false, tag: false, zoom: false,
 };
 
 /** A shared link's picture stays up this long at most, for the drawings to load behind it. */
@@ -75,7 +75,6 @@ export function usePanorama(container: RefObject<HTMLDivElement | null>, panoram
       });
     };
     o.setViewer(v);
-    v.deactivateComponent('pointer'); // we turn the camera ourselves (see Camera)
     void v.moveTo(imageId).then(() => {
       if (disposed) return;
       // same camera the loading picture was rendered with

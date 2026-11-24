@@ -37,7 +37,7 @@ export interface Projection {
 
 interface StateService {
   currentTransform$?: Observable<PhotoTransform>;
-  rotateBasicUnbounded(delta: [number, number]): void;
+  rotateBasicWithoutInertia(delta: [number, number]): void;
   setZoom(zoom: number): void;
 }
 
@@ -49,9 +49,14 @@ interface Internals {
 
 const internals = (viewer: Viewer) => viewer as unknown as Internals;
 
-/** Turn the camera by this much of the panorama (no limits, unlike the public API). */
+/**
+ * Turn the camera by exactly this much of the panorama. (Its other ways of turning add momentum of their
+ * own on every frame, so how far they turn depends on the screen's frame rate.)
+ */
 export function rotateBy(viewer: Viewer, dx: number, dy: number): void {
-  internals(viewer)._navigator.stateService.rotateBasicUnbounded([dx, dy]);
+  // it limits each step, to 0.05 at zoom 0 and half of that per zoom step
+  const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 0.006);
+  for (let k = 0; k < steps; k++) internals(viewer)._navigator.stateService.rotateBasicWithoutInertia([dx / steps, dy / steps]);
 }
 
 /** Zoom without the public API's animation. */

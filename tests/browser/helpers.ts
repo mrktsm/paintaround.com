@@ -21,13 +21,15 @@ const AREA = { x: 300, y: 380, width: 850, height: 340 };
 export type Visitor = Page & { problems: string[] };
 
 /** Someone who opens a place and waits until they can draw. */
-export async function visit(browser: Browser, options: BrowserContextOptions & { firstTime?: boolean; path?: string; alone?: boolean } = {}): Promise<Visitor> {
-  const { firstTime, path, alone, ...context } = options;
+export async function visit(browser: Browser, options: BrowserContextOptions & { firstTime?: boolean; path?: string; alone?: boolean; flat?: boolean } = {}): Promise<Visitor> {
+  const { firstTime, path, alone, flat, ...context } = options;
   const page = await (await browser.newContext(context)).newPage() as Visitor;
   page.problems = [];
   open.push(page);
   // alone: no drawing server, so other tests' drawings aren't here
   if (alone) await page.routeWebSocket(/\/ws$/, () => {});
+  // flat: a place without 3D data
+  if (flat) await page.route('**/deep-layers/**', route => route.fulfill({ status: 404 }));
   page.on('pageerror', e => page.problems.push(e.message));
   let on3D = false;
   page.on('console', m => { if (m.text().includes('3D surface painting ON')) on3D = true; });
@@ -35,7 +37,7 @@ export async function visit(browser: Browser, options: BrowserContextOptions & {
   await page.goto(path ?? `/view?imageId=${PLACE}`);
   if (!path) {
     await expect(page.locator('.viewer-container.loaded')).toBeVisible({ timeout: 20_000 });
-    await expect.poll(() => on3D, { message: 'strokes are drawn onto surfaces', timeout: 20_000 }).toBe(true);
+    if (!flat) await expect.poll(() => on3D, { message: 'strokes are drawn onto surfaces', timeout: 20_000 }).toBe(true);
     await page.waitForTimeout(1500); // strokes already here fade in
   }
   return page;

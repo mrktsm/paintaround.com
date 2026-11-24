@@ -10,25 +10,17 @@ import { Brush, type Drop } from "./flat/marker";
 import { Pen } from "./flat/pencil";
 import type { Projector, SplashParticle, Unprojector } from "./flat/types";
 import { WatercolorBrush } from "./flat/watercolor";
+import { PeerCursors } from "./PeerCursors";
+import { PeerPreviews } from "./PeerPreviews";
 import { getRainbowHueShift, resolveRainbowColor } from "./rainbow";
+import type { ProjectionContext, Scene } from "./scene";
 import { copyCanvas, ensureCanvas, texSource, type MarkerTexture } from "./strokes";
 import { DEEP_NEAR_RADIUS, MID_SAMPLE, type DecalState, type Replay } from "./surfaceStrokes";
 import { WebGLDrawingRenderer, type GPUProjectionUniforms } from "./WebGLDrawingRenderer";
 import { realtime } from "../realtime/client";
 import type { PreviewView } from "../pool/localPreview";
-import { followCamera, screenProjection, type PhotoTransform, type Projection, type RenderCamera, type Subscription } from "../viewer/mapillaryInternals";
-import { PAINT_LAYER, type CursorState, type FinishedStroke, type LayerTiles, type ServerMessage } from "../../shared/realtime";
-
-/** Everything needed to project panorama coordinates to the screen in this frame. */
-interface ProjectionContext {
-  proj: Projection;
-  container: HTMLElement;
-  renderCamera: RenderCamera;
-  transform: PhotoTransform;
-}
-
-/** Other people's cursor rings fade in/out over this long instead of popping. */
-const CURSOR_FADE_MS = 250;
+import { followCamera, screenProjection, type PhotoTransform, type RenderCamera, type Subscription } from "../viewer/mapillaryInternals";
+import { PAINT_LAYER, type FinishedStroke, type LayerTiles, type ServerMessage } from "../../shared/realtime";
 
 export class DrawingOverlay {
   private canvas: HTMLCanvasElement;
@@ -119,9 +111,34 @@ export class DrawingOverlay {
   private _rainbowAnimFrameId: number | null = null; // Animation loop for rainbow textures
   private _container: HTMLElement | null = null;
 
+  /** What's on screen right now, for the parts drawn on top of it. */
+  private readonly scene: Scene;
+  private readonly peers: PeerCursors;
+  private readonly peerPreviews: PeerPreviews;
+
   constructor(container: HTMLElement) {
     preloadDecalTools();
     this._container = container;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- read live by the getters below
+    const overlay = this;
+    this.scene = {
+      container,
+      get deep() { return overlay._deepData; },
+      get fov() { return overlay.currentFov; },
+      get radPerPx() { return ((overlay.currentFov * Math.PI) / 180) / Math.max(1, overlay.canvas.height); },
+      projection: () => this.getSyncProjectionContext(),
+      isSky: (u, v) => this.isSkyAtBasic(u, v),
+    };
+    this.peers = new PeerCursors(this.scene);
+    this.peerPreviews = new PeerPreviews(this.scene, this.peers, {
+      swap: (remove, add) => {
+        const i = remove ? this.markerTextures.indexOf(remove) : -1;
+        if (i > -1) this.markerTextures.splice(i, 1);
+        if (remove) this.webglRenderer?.invalidateTexture(texSource(remove));
+        if (add) this.markerTextures.push(add);
+        this.render();
+      },
+    });
     this.canvas = document.createElement("canvas");
     this.canvas.style.position = "absolute";
     this.canvas.style.top = "0";
@@ -186,7 +203,7 @@ export class DrawingOverlay {
   }
 
   private invalidateProjectionCache(): void {
-    this.reprojectRemoteCursors();
+    this.peers.reproject();
     // keep the outline pinned to its spot in the scene while the camera moves
     if (this._cursorAnchor && this._cursorLayer && this._cursorLayer.style.display !== "none") {
       this._cursorCameraMoved = true;
@@ -533,17 +550,17 @@ export class DrawingOverlay {
     this._realtimeOff = null;
     this.clearLayerTiles();
     // Clean up others' in-progress strokes and cursors
-    for (const id of [...this._remotePreviews.keys()]) this.remotePreviewEnd(id);
+    this.peerPreviews.clear();
     for (const id of [...this._replays.keys()]) this.dropReplays(id);
-    this.clearRemoteCursors();
+    this.peers.clear();
   }
 
   private onRealtimeMessage(msg: ServerMessage): void {
     switch (msg.t) {
       case "welcome":
         // strokes others drew in this room before we arrived (held in server memory)
-        this.clearRemoteCursors();
-        for (const p of msg.peers) this._peerColors.set(p.id, p.color);
+        this.peers.clear();
+        for (const p of msg.peers) this.peers.colors.set(p.id, p.color);
         if (msg.layer) void this.applyLayerTiles(msg.layer);
         for (const s of msg.strokes) void this.addLiveStroke(s);
         return;
@@ -552,41 +569,35 @@ export class DrawingOverlay {
         void this.applyLayerTiles(msg.tiles).then(() => this.dropFlattened(msg.ids));
         return;
       case "peer_join":
-        this._peerColors.set(msg.peer.id, msg.peer.color);
+        this.peers.colors.set(msg.peer.id, msg.peer.color);
         return;
       case "peer_leave":
-        this._peerColors.delete(msg.id);
-        this._peerBrush.delete(msg.id);
-        this.removeRemoteCursor(msg.id);
-        this.remotePreviewEnd(msg.id);
+        this.peers.colors.delete(msg.id);
+        this.peers.brush.delete(msg.id);
+        this.peers.remove(msg.id);
+        this.peerPreviews.end(msg.id);
         this.dropReplays(msg.id);
         return;
       case "cursor":
-        this.setRemoteCursor(msg.from, msg);
+        this.peers.set(msg.from, msg);
         return;
       case "cursor_hide":
-        this.removeRemoteCursor(msg.from);
+        this.peers.remove(msg.from);
         return;
       case "stroke_start":
         if (msg.seed !== undefined && msg.wpp !== undefined && this.replayStart(msg.from, msg)) return;
-        this.remotePreviewStart(msg.from, msg.color, msg.u, msg.v, msg.group);
+        this.peerPreviews.start(msg.from, msg.color, msg.u, msg.v, msg.group);
         return;
       case "stroke_point": {
         const r = this.liveReplay(msg.from);
         if (r && msg.pts) return this.replaySamples(r, msg.pts);
-        this.remotePreviewPoint(msg.from, msg.u, msg.v);
+        this.peerPreviews.point(msg.from, msg.u, msg.v);
         return;
       }
       case "stroke_end": {
         const r = this.liveReplay(msg.from);
         if (r) return this.replayEnd(msg.from, r);
-        // A stroke crossing onto a new surface ends a piece and starts the next one (same group):
-        // keep the line until the finished bitmap arrives, unless a new piece continues it.
-        const rp = this._remotePreviews.get(msg.from);
-        if (!rp) return;
-        rp.ended = true;
-        clearTimeout(rp.timer);
-        rp.timer = setTimeout(() => { if (this._remotePreviews.get(msg.from) === rp && rp.ended) this.remotePreviewEnd(msg.from); }, 4000);
+        this.peerPreviews.pieceEnded(msg.from);
         return;
       }
       case "stroke_done": {
@@ -598,8 +609,7 @@ export class DrawingOverlay {
         for (const r of replays) clearTimeout(r.timer);
         void this.addLiveStroke(msg.stroke).then(() => {
           requestAnimationFrame(() => { for (const r of replays) this.dropReplay(from, r); });
-          const rp = this._remotePreviews.get(from);
-          if (rp && rp.ended && (group === undefined || rp.group === undefined || rp.group === group)) this.remotePreviewEnd(from);
+          this.peerPreviews.finished(from, group);
         });
         return;
       }
@@ -753,18 +763,6 @@ export class DrawingOverlay {
     if (changed && render) this.render();
   }
 
-  // ── Other people's cursors ──
-  /** Peer id -> their cursor: an outline the size of their brush, wrapped onto the surface. */
-  private _remoteCursors = new Map<string, {
-    pts: [number, number][]; paint: string | null; path: SVGPathElement; halo: SVGPathElement;
-    timer: ReturnType<typeof setTimeout>;
-    /** set while fading out; cleared if the cursor comes back before it's gone */
-    fadeOut: ReturnType<typeof setTimeout> | null;
-  }>();
-  private _remoteCursorSvg: SVGSVGElement | null = null;
-  private _peerColors = new Map<string, string>();
-  /** each peer's brush radius (radians), from their cursor */
-  private _peerBrush = new Map<string, number>();
   private _realtimeOff: (() => void) | null = null;
   private _lastCursorSend = 0;
 
@@ -797,127 +795,6 @@ export class DrawingOverlay {
     realtime.send({ t: "cursor", u: b[0], v: b[1], radius: radiusPx * radPerPx, paint: paint === "rainbow" ? null : paint });
   }
 
-  private ensureRemoteSvg(): SVGSVGElement | null {
-    if (!this._remoteCursorSvg && this._container) {
-      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg") as SVGSVGElement;
-      svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:11;overflow:visible";
-      this._container.appendChild(svg);
-      this._remoteCursorSvg = svg;
-    }
-    return this._remoteCursorSvg;
-  }
-
-  private setRemoteCursor(id: string, c: CursorState): void {
-    const svg = this.ensureRemoteSvg();
-    if (!svg) return;
-    this._peerBrush.set(id, c.radius);
-    if (this.isSkyAtBasic(c.u, c.v)) return this.removeRemoteCursor(id); // nothing to paint up there
-    let rc = this._remoteCursors.get(id);
-    if (!rc) {
-      const NS = "http://www.w3.org/2000/svg";
-      const halo = document.createElementNS(NS, "path") as SVGPathElement;
-      halo.setAttribute("fill", "none");
-      // same weights as our own brush ring (3px halo under a 1.5px line), just in their colour
-      halo.setAttribute("stroke", "rgba(0,0,0,0.45)");
-      halo.setAttribute("stroke-width", "3");
-      halo.setAttribute("stroke-linejoin", "round");
-      const path = document.createElementNS(NS, "path") as SVGPathElement;
-      path.setAttribute("stroke-width", "1.5");
-      path.setAttribute("stroke-linejoin", "round");
-      // fade in: start transparent, ease to visible next frame
-      for (const el of [halo, path]) {
-        el.style.transition = `opacity ${CURSOR_FADE_MS}ms ease`;
-        el.style.opacity = "0";
-      }
-      svg.append(halo, path);
-      requestAnimationFrame(() => { halo.style.opacity = "1"; path.style.opacity = "1"; });
-      rc = { pts: [], paint: null, path, halo, timer: setTimeout(() => {}, 0), fadeOut: null };
-      this._remoteCursors.set(id, rc);
-    } else if (rc.fadeOut) {
-      // came back while fading out: cancel and fade back in
-      clearTimeout(rc.fadeOut);
-      rc.fadeOut = null;
-      rc.halo.style.opacity = "1";
-      rc.path.style.opacity = "1";
-    }
-    // ring in panorama coords on the surface, sized from their brush angle at our zoom
-    const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-    const radiusPx = Math.max(2, c.radius / radPerPx);
-    let pts: [number, number][] = [];
-    if (this._deepData) {
-      const decal = SurfaceDecal.create(this._deepData, c.u, c.v, radPerPx);
-      if (decal) pts = surfaceRing(this._deepData, decal.basis, radiusPx * decal.basis.s, 64);
-    }
-    if (!pts.length) {
-      // no depth here: a small ring in panorama space around the point
-      const r = c.radius / (2 * Math.PI);
-      for (let k = 0; k <= 64; k++) {
-        const a = (k / 64) * Math.PI * 2;
-        pts.push([c.u + Math.cos(a) * r, c.v + Math.sin(a) * r * 2]);
-      }
-    }
-    rc.pts = pts;
-    rc.paint = c.paint;
-    // Ring = this person's colour only, never their paint (like tldraw/Figma: identity on the
-    // cursor, content colour only in the stroke itself). Their paint shows once they draw.
-    rc.path.setAttribute("stroke", this._peerColors.get(id) ?? "#ffffff");
-    rc.path.setAttribute("fill", "none");
-    rc.path.dataset.peer = id;
-    clearTimeout(rc.timer);
-    rc.timer = setTimeout(() => this.removeRemoteCursor(id), 5000); // idle -> fade away
-    this.reprojectRemoteCursor(rc);
-  }
-
-  private reprojectRemoteCursor(rc: { pts: [number, number][]; path: SVGPathElement; halo: SVGPathElement }): void {
-    const sync = this.getSyncProjectionContext();
-    if (!sync) return;
-    let d = "";
-    let pen = false;
-    let shown = 0;
-    for (const p of rc.pts) {
-      let sp: number[] | null = null;
-      try {
-        sp = sync.proj.basicToCanvas(p, sync.container, sync.renderCamera, sync.transform);
-      } catch {
-        sp = null;
-      }
-      if (!sp) { pen = false; continue; }
-      d += `${pen ? "L" : "M"}${sp[0].toFixed(1)},${sp[1].toFixed(1)}`;
-      pen = true;
-      shown++;
-    }
-    // looking elsewhere: their cursor simply isn't on our screen
-    if (shown && shown === rc.pts.length) d += "Z";
-    rc.path.setAttribute("d", d);
-    rc.halo.setAttribute("d", d);
-  }
-
-  private reprojectRemoteCursors(): void {
-    for (const rc of this._remoteCursors.values()) this.reprojectRemoteCursor(rc);
-  }
-
-  /** Fade their ring out (idle, finger lifted, over the sky, left); instant when switching rooms. */
-  private removeRemoteCursor(id: string, instant = false): void {
-    const rc = this._remoteCursors.get(id);
-    if (!rc) return;
-    clearTimeout(rc.timer);
-    const drop = () => {
-      if (rc.fadeOut) clearTimeout(rc.fadeOut);
-      rc.path.remove();
-      rc.halo.remove();
-      if (this._remoteCursors.get(id) === rc) this._remoteCursors.delete(id);
-    };
-    if (instant) return drop();
-    if (rc.fadeOut) return; // already fading
-    rc.halo.style.opacity = "0";
-    rc.path.style.opacity = "0";
-    rc.fadeOut = setTimeout(drop, CURSOR_FADE_MS);
-  }
-
-  private clearRemoteCursors(): void {
-    for (const id of [...this._remoteCursors.keys()]) this.removeRemoteCursor(id, true);
-  }
-
   // ── Others' strokes on 3D surfaces: replayed with the same brush ──
   // The drawer sends the decal's origin + scale, the brush seed and every brush sample, so we
   // rebuild their decal, run the same tool on the same samples, and draw it with the same
@@ -931,7 +808,7 @@ export class DrawingOverlay {
     if (!toolType) return false;
     const st = this.makeDecalAt([m.u, m.v], 1, m.wpp, true, { color: m.color, lineWidth: m.lineWidth, toolType }, m.seed ?? 0, m.group ?? 0, m.fov);
     if (!st) return false;
-    this.remotePreviewEnd(id);
+    this.peerPreviews.end(id);
     const r: Replay = { st, group: m.group, ended: false, dead: false, mids: [], tex: null };
     const list = this._replays.get(id) ?? [];
     const before = list[list.length - 1];
@@ -1013,147 +890,6 @@ export class DrawingOverlay {
 
   private dropReplays(id: string): void {
     for (const r of [...(this._replays.get(id) ?? [])]) this.dropReplay(id, r);
-  }
-
-  // ── Others' strokes while they draw: painted onto the panorama, live ──
-  // The brush's real footprint on the surface (the same wrapped ring as their cursor) is stamped
-  // along their path into a panorama-space bitmap, lit with this panorama's lighting, and shown
-  // like any finished stroke, so it sits on the surface instead of floating over it. Their
-  // finished bitmap (stroke_done) replaces it when they let go.
-  private _remotePreviews = new Map<string, {
-    color: string; radius: number; group?: number; ended: boolean; timer?: ReturnType<typeof setTimeout>;
-    /** stamped footprints in basic coords (u unwrapped around u0, so the seam is continuous) */
-    stamps: [number, number][][]; last: [number, number]; u0: number;
-    tex: MarkerTexture | null; dirty: boolean;
-  }>();
-
-  private remotePreviewStart(id: string, color: string, u: number, v: number, group?: number): void {
-    const cur = this._remotePreviews.get(id);
-    if (cur && group !== undefined && cur.group === group) {
-      // next piece of the same stroke (it crossed onto another surface): keep painting
-      cur.ended = false;
-      clearTimeout(cur.timer);
-      this.remotePreviewPoint(id, u, v);
-      return;
-    }
-    this.remotePreviewEnd(id);
-    const paint = color === "rainbow" ? (this._peerColors.get(id) ?? "#ff3b30") : color;
-    // brush radius from their cursor (radians); a sensible default until one arrives
-    const radius = this._peerBrush.get(id) ?? 0.006;
-    const rp = { color: paint, radius, group, ended: false, stamps: [] as [number, number][][], last: [u, v] as [number, number], u0: u, tex: null, dirty: false };
-    this._remotePreviews.set(id, rp);
-    this.stampRemote(id, u, v);
-  }
-
-  private remotePreviewPoint(id: string, u: number, v: number): void {
-    const rp = this._remotePreviews.get(id);
-    if (!rp) return;
-    // unwrap u next to the previous point, then stamp along the gap so the line stays solid
-    while (u - rp.last[0] > 0.5) u -= 1;
-    while (rp.last[0] - u > 0.5) u += 1;
-    const [lu, lv] = rp.last;
-    const lat = (0.5 - lv) * Math.PI;
-    const ang = Math.hypot((u - lu) * 2 * Math.PI * Math.cos(lat), (v - lv) * Math.PI);
-    const steps = Math.min(40, Math.max(1, Math.ceil(ang / (rp.radius * 0.5))));
-    for (let k = 1; k <= steps; k++) this.stampRemote(id, lu + ((u - lu) * k) / steps, lv + ((v - lv) * k) / steps);
-    rp.last = [u, v];
-  }
-
-  /** One brush footprint at (u, v), wrapped onto the surface like their cursor ring. */
-  private stampRemote(id: string, u: number, v: number): void {
-    const rp = this._remotePreviews.get(id);
-    if (!rp) return;
-    let ring: [number, number][] = [];
-    if (this._deepData) {
-      const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-      const decal = SurfaceDecal.create(this._deepData, ((u % 1) + 1) % 1, v, radPerPx);
-      if (decal) ring = surfaceRing(this._deepData, decal.basis, (rp.radius / radPerPx) * decal.basis.s, 20, 8);
-    }
-    if (!ring.length) {
-      // no depth here (or sky): a plain angular circle
-      const cosLat = Math.max(0.05, Math.cos((0.5 - v) * Math.PI));
-      for (let k = 0; k < 20; k++) {
-        const a = (k / 20) * Math.PI * 2;
-        ring.push([u + (Math.cos(a) * rp.radius) / (2 * Math.PI * cosLat), v + (Math.sin(a) * rp.radius) / Math.PI]);
-      }
-    }
-    // keep every footprint next to u0 (the ring may come back wrapped to [0, 1))
-    rp.stamps.push(ring.map(([pu, pv]) => {
-      while (pu - rp.u0 > 0.5) pu -= 1;
-      while (rp.u0 - pu > 0.5) pu += 1;
-      return [pu, pv];
-    }));
-    if (!rp.dirty) {
-      rp.dirty = true;
-      requestAnimationFrame(() => this.rebuildRemotePreview(id));
-    }
-  }
-
-  /** Re-render the preview bitmap (at most once a frame) and swap it into the stroke list. */
-  private rebuildRemotePreview(id: string): void {
-    const rp = this._remotePreviews.get(id);
-    if (!rp) return;
-    rp.dirty = false;
-    const W = 2048, H = 1024, SS = 2; // panorama px, supersampled like baked strokes
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const ring of rp.stamps) for (const [u, v] of ring) {
-      const x = u * W, y = v * H;
-      if (x < x0) x0 = x; if (x > x1) x1 = x;
-      if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-    if (!isFinite(x0)) return;
-    x0 = Math.floor(x0) - 1; y0 = Math.max(0, Math.floor(y0) - 1);
-    x1 = Math.ceil(x1) + 1; y1 = Math.min(H, Math.ceil(y1) + 1);
-    const w = x1 - x0, h = y1 - y0;
-    if (w <= 0 || h <= 0 || w > 1600 || h > 900) return; // runaway: keep the last good preview
-    const canvas = document.createElement("canvas");
-    canvas.width = w * SS;
-    canvas.height = h * SS;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
-    ctx.fillStyle = rp.color;
-    ctx.setTransform(SS, 0, 0, SS, -x0 * SS, -y0 * SS);
-    for (const ring of rp.stamps) {
-      ctx.beginPath();
-      ring.forEach(([u, v], k) => (k ? ctx.lineTo(u * W, v * H) : ctx.moveTo(u * W, v * H)));
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    // equirect is linear in u, v, so a coarse grid spans the box exactly
-    const rows = 4, cols = 4;
-    const gridBasic: [number, number][][] = [];
-    for (let r = 0; r <= rows; r++) {
-      const row: [number, number][] = [];
-      for (let c = 0; c <= cols; c++) row.push([(x0 + (c / cols) * w) / W, (y0 + (r / rows) * h) / H]);
-      gridBasic.push(row);
-    }
-    if (this._deepShade) applyShading(canvas, gridBasic, this._deepShade);
-    const tex: MarkerTexture = {
-      canvas, gridBasic, gridRows: rows, gridCols: cols,
-      srcWidth: canvas.width, srcHeight: canvas.height,
-      referenceFov: this.currentFov, opacity: 1,
-    };
-    if (rp.tex) {
-      const i = this.markerTextures.indexOf(rp.tex);
-      if (i > -1) this.markerTextures.splice(i, 1);
-      if (this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(rp.tex));
-    }
-    rp.tex = tex;
-    this.markerTextures.push(tex);
-    this.render();
-  }
-
-  private remotePreviewEnd(id: string): void {
-    const rp = this._remotePreviews.get(id);
-    if (!rp) return;
-    clearTimeout(rp.timer);
-    if (rp.tex) {
-      const i = this.markerTextures.indexOf(rp.tex);
-      if (i > -1) this.markerTextures.splice(i, 1);
-      if (this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(rp.tex));
-      this.render();
-    }
-    this._remotePreviews.delete(id);
   }
 
   private resizeCanvas(): void {
@@ -3088,8 +2824,7 @@ export class DrawingOverlay {
   dispose(): void {
     this._cursorLayer?.remove();
     this._cursorLayer = null;
-    this._remoteCursorSvg?.remove();
-    this._remoteCursorSvg = null;
+    this.peers.dispose();
     this._cursorSvg = null;
     this._cursorFill = null;
     if (this.animationFrameId) {

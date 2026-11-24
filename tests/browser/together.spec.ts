@@ -61,3 +61,38 @@ test('drawing together: live strokes, latecomers, erasing, undo and leaving', as
   });
   expect(all.flatMap(p => p.problems)).toEqual([]);
 });
+
+test('where there is no 3D data, strokes are still seen live and end up the same', async ({ browser }) => {
+  const a = await visit(browser, { flat: true }), b = await visit(browser, { flat: true }), all = [a, b];
+  await pick(a, 'marker');
+  const empty = await look(b, all), emptyA = await look(a, all);
+  await drag(a, [520, 480], [700, 480], { hold: true });
+  await b.waitForTimeout(500);
+  expect(await changed(empty, await b.screenshot({ clip: { x: 300, y: 380, width: 850, height: 340 } }))).toBeGreaterThan(1000);
+  await a.mouse.up();
+  await a.waitForTimeout(3000);
+  const seen = await changed(empty, await look(b, all)), mine = await changed(emptyA, await look(a, all));
+  expect(Math.abs(seen - mine) / mine).toBeLessThan(0.12); // the live version is gone, only the finished one is left
+  await a.click('[aria-label="Undo"]');
+  await a.waitForTimeout(1800);
+  expect(await changed(empty, await look(b, all))).toBeLessThan(mine * 0.05);
+});
+
+test('others see your cursor ring, pinned to the scene, until you leave', async ({ browser }) => {
+  const a = await visit(browser), b = await visit(browser);
+  const ring = b.locator('svg path[data-peer]');
+  await pick(a, 'marker');
+  await a.mouse.move(700, 600);
+  await a.mouse.move(705, 600, { steps: 4 });
+  await expect(ring).toHaveCount(1);
+  await expect.poll(async () => (await ring.boundingBox())?.width ?? 0).toBeGreaterThan(4);
+  const at = (await ring.boundingBox())!;
+  expect(Math.abs(at.x + at.width / 2 - 705)).toBeLessThan(25);
+  expect(Math.abs(at.y + at.height / 2 - 600)).toBeLessThan(25);
+  await drag(b, [700, 500], [600, 500], { button: 'right' });
+  const moved = (await ring.boundingBox())!;
+  expect(at.x - moved.x).toBeGreaterThan(40); // the scene moved, the ring with it
+  await a.click('.view-close');
+  await expect(ring).toHaveCount(0);
+  expect([...a.problems, ...b.problems]).toEqual([]);
+});

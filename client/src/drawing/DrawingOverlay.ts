@@ -218,6 +218,11 @@ export class DrawingOverlay {
     this.room.join(imageId);
   }
 
+  /** Resolves once the drawings that were already here are on screen. */
+  drawingsLoaded(): Promise<void> {
+    return this.room.loaded;
+  }
+
   leaveRealtime(): void {
     this.room.leave();
   }
@@ -292,9 +297,10 @@ export class DrawingOverlay {
     return this.renderer.preview(view, ss);
   }
 
-  fadeIn(): void {
+  /** Show the drawings; at once, or fading in. */
+  show(fade: boolean): void {
     for (const c of this.layers) {
-      c.style.transition = "opacity 0.4s ease-in-out";
+      c.style.transition = fade ? "opacity 0.4s ease-in-out" : "none";
       c.style.opacity = "1";
     }
     this.scene.redraw();

@@ -19,6 +19,9 @@ export class LiveRoom {
   private readonly strokes: Strokes;
   private room: string | null = null;
   private off: (() => void) | null = null;
+  /** Resolves once the drawings that were here when we came are on screen. */
+  loaded: Promise<void> = Promise.resolve();
+  private onLoaded: () => void = () => {};
   /** Strokes being encoded for the room. */
   private readonly sharing = new Set<Promise<void>>();
   private ownChanges = false;
@@ -45,6 +48,7 @@ export class LiveRoom {
   join(imageId: string): void {
     this.leaveRoom();
     this.room = imageId;
+    this.loaded = new Promise((resolve) => { this.onLoaded = resolve; });
     this.off = realtime.on((msg) => this.receive(msg));
     realtime.join(imageId);
   }
@@ -119,8 +123,7 @@ export class LiveRoom {
         // strokes others drew in this room before we arrived (held in server memory)
         this.peers.clear();
         for (const p of msg.peers) this.peers.colors.set(p.id, p.color);
-        if (msg.layer) void this.layer.apply(this.room!, msg.layer);
-        for (const s of msg.strokes) void this.add(s);
+        void Promise.all([msg.layer && this.layer.apply(this.room!, msg.layer), ...msg.strokes.map((s) => this.add(s))]).then(this.onLoaded);
         return;
       case "flattened":
         // swap the separate strokes for the updated layer once its tiles are on screen

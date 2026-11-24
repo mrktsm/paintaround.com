@@ -2,7 +2,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import mouseRightClick from '../assets/mouse-right-click.svg';
 import touchAndScroll from '../assets/touch-and-scroll.svg';
-import CloseIcon from '../components/CloseIcon';
 import type { Panorama } from '../pool/catalog';
 import { DARK_UI } from '../theme';
 
@@ -59,41 +58,46 @@ export function UndoRedo({ canUndo, canRedo, onUndo, onRedo }: { canUndo: boolea
   );
 }
 
-export function CloseButton({ onClick }: { onClick(): void }) {
+const GLASS: CSSProperties = {
+  // same frosted, slightly see-through grey + hairline + soft shadow as the left sidebar
+  background: DARK_UI ? 'rgba(30, 31, 29, 0.76)' : 'rgba(226, 226, 231, 0.78)',
+  backdropFilter: DARK_UI ? 'blur(30px) saturate(1.5)' : 'blur(18px) saturate(1.3)',
+  WebkitBackdropFilter: DARK_UI ? 'blur(30px) saturate(1.5)' : 'blur(18px) saturate(1.3)',
+  boxShadow: DARK_UI ? '0 0 0 0.5px rgba(255,255,255,0.1), 0 6px 20px rgba(0,0,0,0.25)' : '0 0 0 0.5px rgba(0,0,0,0.1), 0 6px 20px rgba(0,0,0,0.08)',
+  color: DARK_UI ? '#fff' : '#1c1c1e',
+};
+
+/** Apple's share symbol: a box with an arrow out of its top. */
+function ShareIcon() {
   return (
-    <button
-      className="view-close"
-      onClick={onClick}
-      aria-label="Close"
-      title="Close"
-      style={{
-        pointerEvents: 'auto',
-        position: 'absolute',
-        top: 'calc(20px + env(safe-area-inset-top, 0px))',
-        right: 'calc(20px + env(safe-area-inset-right, 0px))',
-        width: '40px',
-        height: '40px',
-        padding: 0,
-        // Same frosted, slightly see-through grey + hairline + soft shadow as the left sidebar
-        background: DARK_UI ? 'rgba(30, 31, 29, 0.76)' : 'rgba(226, 226, 231, 0.78)',
-        backdropFilter: DARK_UI ? 'blur(30px) saturate(1.5)' : 'blur(18px) saturate(1.3)',
-        WebkitBackdropFilter: DARK_UI ? 'blur(30px) saturate(1.5)' : 'blur(18px) saturate(1.3)',
-        borderRadius: '50%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: DARK_UI ? '#fff' : '#1c1c1e',
-        boxShadow: DARK_UI ? '0 0 0 0.5px rgba(255,255,255,0.1), 0 6px 20px rgba(0,0,0,0.25)' : '0 0 0 0.5px rgba(0,0,0,0.1), 0 6px 20px rgba(0,0,0,0.08)',
-        zIndex: 20,
-        border: 'none',
-        cursor: 'pointer',
-        transition: 'transform 0.2s ease',
-      }}
-      onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.04)'}
-      onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-    >
-      <CloseIcon />
-    </button>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 14.5V2.8M7.8 6.6 12 2.5l4.2 4.1" />
+      <path d="M8 9.8H6.6a2 2 0 0 0-2 2v7.7a2 2 0 0 0 2 2h10.8a2 2 0 0 0 2-2v-7.7a2 2 0 0 0-2-2H16" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
+}
+
+/** Share what you're looking at, and leave. `onShare` says whether the link was copied. */
+export function ViewActions({ canShare, onShare, onDone }: { canShare: boolean; onShare(): Promise<boolean>; onDone(): void }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1800);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  const onClick = () => void onShare().then(setCopied, e => console.warn('[share]', e));
+  return (
+    <div className="view-actions">
+      {copied && <span className="view-copied" role="status" style={GLASS}>Link copied</span>}
+      <button className="view-action view-share" aria-label="Share" title="Share" disabled={!canShare} onClick={onClick} style={GLASS}>
+        {copied ? <CheckIcon /> : <ShareIcon />}
+      </button>
+      <button className="view-action view-close" onClick={onDone} style={GLASS}>Done</button>
+    </div>
   );
 }
 

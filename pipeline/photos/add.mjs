@@ -10,7 +10,7 @@ const headers = { 'User-Agent': 'panorama-sampler/1.0' };
 const root = new URL('../../', import.meta.url);
 const cache = new URL('pipeline/photos/cache/', root);
 const output = new URL('client/public/panorama-pool/', root);
-const manifestPath = new URL('client/src/data/panorama-pool.json', root);
+const manifestPath = new URL('shared/panorama-pool.json', root);
 const MAX_SOURCE_BYTES = 64000000;
 const pausedHosts = new Set();
 const curation = JSON.parse(await readFile(new URL('pipeline/photos/curation.json',root),'utf8').catch(error => {
@@ -154,7 +154,7 @@ async function sample(candidate) {
     return entry;
 }
 async function checkpoint() {
-  const temporary = new URL('client/src/data/panorama-pool.json.tmp', root);
+  const temporary = new URL('shared/panorama-pool.json.tmp', root);
   await writeFile(temporary, JSON.stringify({ version: 1, items: [...items.values()] }, null, 2) + '\n');
   await rename(temporary, manifestPath);
 }

@@ -3,6 +3,7 @@ import { TransitionMode, Viewer } from 'mapillary-js';
 import { loadDeepData } from '../deep/surfaceDecal';
 import { DrawingOverlay } from '../drawing/DrawingOverlay';
 import { PanoramaDataProvider } from '../pool/PanoramaDataProvider';
+import type { LookingAt } from '../../../shared/shareView';
 import type { Panorama } from '../pool/catalog';
 import { showOwnDrawing } from '../pool/localPreview';
 import { START_ZOOM } from '../../../shared/startView';
@@ -13,8 +14,11 @@ const COMPONENTS = {
   pointer: true, popup: false, sequence: false, slider: false, spatial: false, tag: false, zoom: false,
 };
 
-/** The place's photo and everything drawn on it. */
-export function usePanorama(container: RefObject<HTMLDivElement | null>, panorama: Panorama, onHistoryChange: (overlay: DrawingOverlay) => void) {
+/** A shared link's picture stays up this long at most, for the drawings to load behind it. */
+const WAIT_FOR_DRAWINGS_MS = 2000;
+
+/** The place's photo and everything drawn on it. `at`: where a shared link looks. */
+export function usePanorama(container: RefObject<HTMLDivElement | null>, panorama: Panorama, at: LookingAt | null, onHistoryChange: (overlay: DrawingOverlay) => void) {
   const viewer = useRef<Viewer | null>(null);
   const overlay = useRef<DrawingOverlay | null>(null);
   /** The photo is up. */
@@ -31,7 +35,16 @@ export function usePanorama(container: RefObject<HTMLDivElement | null>, panoram
     let revealFrame: number | undefined;
     const reveal = () => {
       if (disposed || !cameraReady || !rendered) return;
-      revealFrame ??= requestAnimationFrame(() => { if (!disposed) setIsLoaded(true); });
+      revealFrame ??= requestAnimationFrame(() => { if (!disposed) void show(); });
+    };
+    const show = async () => {
+      if (at) {
+        // its picture has the drawings: swap it for the place once they're there too
+        await Promise.race([o.drawingsLoaded(), new Promise(r => setTimeout(r, WAIT_FOR_DRAWINGS_MS))]);
+        if (disposed) return;
+        o.show(false);
+      }
+      setIsLoaded(true);
     };
 
     // alongside the photo: the view can appear right away, drawing waits until its lighting is there
@@ -57,7 +70,7 @@ export function usePanorama(container: RefObject<HTMLDivElement | null>, panoram
     o.onReady = () => {
       void loadDeepData(imageId).then(() => {
         if (disposed) return;
-        o.fadeIn();
+        o.show(!at);
         setIsReady(true);
       });
     };
@@ -65,8 +78,9 @@ export function usePanorama(container: RefObject<HTMLDivElement | null>, panoram
     v.deactivateComponent('pointer'); // we turn the camera ourselves (see Camera)
     void v.moveTo(imageId).then(() => {
       if (disposed) return;
-      v.setCenter([panorama.thumbnailView?.u ?? 0.75, panorama.thumbnailView?.v ?? 0.5]);
-      v.setZoom(START_ZOOM); // same camera the loading preview was rendered with
+      // same camera the loading picture was rendered with
+      v.setCenter(at ? [at.u, at.v] : [panorama.thumbnailView?.u ?? 0.75, panorama.thumbnailView?.v ?? 0.5]);
+      v.setZoom(at?.zoom ?? START_ZOOM);
       // shown once that camera is applied, so the viewer's default direction doesn't flash by
       cameraReady = true;
       reveal();
@@ -90,7 +104,7 @@ export function usePanorama(container: RefObject<HTMLDivElement | null>, panoram
       }
       viewer.current = null;
     };
-  }, [container, panorama, onHistoryChange]);
+  }, [container, panorama, at, onHistoryChange]);
 
   return { viewer, overlay, isLoaded, isReady, failed };
 }

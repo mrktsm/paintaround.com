@@ -5,17 +5,17 @@ client/src/explore   the map page: every place, search, the panel
 client/src/view      a place: the camera, the pointer, the toolbar
 client/src/drawing   everything drawn over the photo
 client/src/deep      3D: surfaces, unwrapping them, the brushes, lighting
-client/src/pool      the catalog of places and their photos
+client/src/pool      the places and their photos
 client/src/realtime  the connection to the drawing server
 server               the drawing server: rooms, previews, moderation, alerts
-shared               what both use: messages, panorama projection, the starting camera
+shared               what both use: messages, the catalog of places, panorama projection, shared links
 pipeline             adding places: photos and 3D data
 tests                server and unit tests (npm test), browser tests (npm run test:browser)
 ```
 
 ## Places
 
-`client/src/data/panorama-pool.json` lists the places. Photos are equirectangular (360° × 180°), 4096 × 2048.
+`shared/panorama-pool.json` lists the places. Photos are equirectangular (360° × 180°), 4096 × 2048.
 A point on one is `(u, v)`, both from 0 to 1; the code calls these *basic* coordinates, like Mapillary.
 [mapillary-js](https://github.com/mapillary/mapillary-js) shows the photo. The few of its internals that
 are needed (to turn the camera freely and follow it every frame) are all behind
@@ -58,6 +58,14 @@ strokes of the least recently used rooms go.
 
 `server/previews.ts` draws each place's paint into the photos shown on the map.
 
+## Sharing
+
+A shared link says where to look: `/view?imageId=<id>&at=<u>,<v>,<zoom>` (`shared/shareView.ts`). The drawing
+server (`server/share.ts`) answers `/view` with the site's page plus the place's title and picture for chat
+apps, and renders that picture on demand from the photo and the moderated drawings. The place then opens with
+the same picture as its loading frame. Nothing is stored; the latest pictures are cached in memory, and there
+is a limit per minute.
+
 ## Moderation
 
 `server/moderation.ts`. About 20 seconds after someone stops drawing, what they drew is rendered as two
@@ -72,8 +80,8 @@ curl -X POST localhost:8787/internal/restore/<id>
 
 ## Deploying
 
-`scripts/deploy.sh` copies the site to a server where Caddy serves it and passes `/ws` and `/api` to the
-drawing server. `.github/workflows/deploy.yml` does that for pushes to `main`, once the variables
+`scripts/deploy.sh` copies the site to a server where Caddy serves it and passes `/ws`, `/api` and `/view` to
+the drawing server ([docs/Caddyfile](Caddyfile)). `.github/workflows/deploy.yml` does that for pushes to `main`, once the variables
 listed at its top are set. The drawing server restarts only if its code changed, since that clears the
 drawings.
 

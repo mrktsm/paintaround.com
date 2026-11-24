@@ -9,11 +9,13 @@
  */
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
-import { getPreview, previewManifest, schedulePreview } from './previews.ts';
+import { drawingsChanged, getPreview, previewManifest, schedulePreview } from './previews.ts';
+import { isPlace, placePage, sharePicture } from './share.ts';
 import { PaintLayer } from './layer.ts';
 import { alertFlagged } from './alerts.ts';
 import { LOG_ONLY, MODERATION_ON, moderate, splitDrawings, type Verdict } from './moderation.ts';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { parseAt } from '../shared/shareView.ts';
 import { LIMITS, PEER_COLORS, type ClientMessage, type FinishedStroke, type Peer, type ServerMessage } from '../shared/realtime.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -375,6 +377,8 @@ setInterval(() => { for (const room of rooms.values()) void flatten(room); }, Ma
 //   GET /api/previews                 -> { [placeId]: version } for places whose preview has drawings
 //   GET /api/previews/<id>/card|loading -> the JPEG
 //   GET /api/layer/<room>/<x_y>         -> a paint-layer tile (WebP)
+//   GET /api/share/<id>.jpg?at=u,v,zoom -> a shared link's picture
+//   GET /view?imageId=<id>&at=u,v,zoom  -> the site's page, telling chat apps about that picture
 const http = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const cors = { 'access-control-allow-origin': '*' };
@@ -411,6 +415,23 @@ const http = createServer((req, res) => {
     if (!tile) { res.writeHead(404, cors).end(); return; }
     res.writeHead(200, { ...cors, 'content-type': 'image/webp', 'cache-control': 'public, max-age=31536000, immutable' });
     res.end(tile.buf);
+    return;
+  }
+  const shared = url.pathname.match(/^\/api\/share\/([\w.-]{1,128})\.jpg$/);
+  if (shared && isPlace(shared[1])) {
+    const id = shared[1], room = rooms.get(id);
+    void sharePicture(id, parseAt(url.searchParams.get('at')), drawingsChanged(id), room ? roomDrawings(room) : () => null).then(jpeg => {
+      if (jpeg) res.writeHead(200, { ...cors, 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=60' }).end(jpeg);
+      else res.writeHead(302, { location: `/panorama-pool/${id}-card.jpg`, 'cache-control': 'no-store' }).end(); // too busy: the plain photo
+    });
+    return;
+  }
+  if (url.pathname === '/view') {
+    const id = url.searchParams.get('imageId') ?? '', origin = `https://${req.headers.host}`;
+    void placePage(id, parseAt(url.searchParams.get('at')), drawingsChanged(id), ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0]).then(html => {
+      if (html) res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' }).end(html);
+      else res.writeHead(503).end(); // the web server sends the plain page instead
+    });
     return;
   }
   const m = url.pathname.match(/^\/api\/previews\/([\w.-]{1,128})\/(card|loading)$/);

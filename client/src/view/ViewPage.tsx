@@ -1,31 +1,33 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import 'mapillary-js/dist/mapillary.css';
 import './view.css';
-import panoramaPreview from '../assets/panorama-preview.jpg';
+import { parseAt, type LookingAt } from '../../../shared/shareView';
 import type { DrawingOverlay } from '../drawing/DrawingOverlay';
 import { DEFAULT_PANORAMA, hasCoordinates, PANORAMA_BY_ID, type Panorama } from '../pool/catalog';
 import { showOwnDrawing } from '../pool/localPreview';
-import { panoramaLoadingPreviewUrl } from '../pool/panoramaImages';
 import { recordVisit } from '../pool/visited';
 import { DARK_UI } from '../theme';
-import { CloseButton, LoadingSpinner, PhotoCredit, Tutorial, UndoRedo } from './controls';
+import { LoadingSpinner, PhotoCredit, Tutorial, UndoRedo, ViewActions } from './controls';
+import { share, shareLink } from './share';
 import Toolbar from './Toolbar';
 import type { Tool } from './tools';
+import { useLoadingPicture } from './useLoadingPicture';
 import { usePanorama } from './usePanorama';
 import { usePointer } from './usePointer';
 import { useToolColors } from './useToolColors';
 import { useTutorial } from './useTutorial';
 
 /** A place: its photo, everyone's drawings on it, and the tools to draw with. */
-function View({ panorama }: { panorama: Panorama }) {
+function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
   const navigate = useNavigate();
   const container = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<Tool>('pencil');
   const [colors, setColor] = useToolColors();
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const readHistory = useCallback((o: DrawingOverlay) => setHistory({ canUndo: o.canUndo(), canRedo: o.canRedo() }), []);
-  const { viewer, overlay, isLoaded, isReady, failed } = usePanorama(container, panorama, readHistory);
+  const { viewer, overlay, isLoaded, isReady, failed } = usePanorama(container, panorama, at, readHistory);
+  const loadingPicture = useLoadingPicture(panorama, at);
   const tutorial = useTutorial();
   const pointer = usePointer({
     container, viewer, overlay, tool,
@@ -57,7 +59,7 @@ function View({ panorama }: { panorama: Panorama }) {
         ref={container}
         className={`viewer-container drawing-active ${tool === 'eraser' ? 'tool-eraser' : ''} ${isLoaded ? 'loaded' : ''}`}
         style={{
-          backgroundImage: `url(${panoramaLoadingPreviewUrl(panorama)}), url(${panorama.thumbnailUrl || panorama.previewUrl || panoramaPreview})`,
+          backgroundImage: loadingPicture,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
@@ -79,7 +81,11 @@ function View({ panorama }: { panorama: Panorama }) {
       {/* there right away, usable once the place can be drawn on */}
       <div style={{ pointerEvents: !isLoaded || !isReady || tutorial.state !== 'gone' ? 'none' : 'auto' }}>
         <UndoRedo {...history} onUndo={() => overlay.current?.undo()} onRedo={() => overlay.current?.redo()} />
-        <CloseButton onClick={close} />
+        <ViewActions
+          canShare={isLoaded}
+          onShare={async () => !!viewer.current && share(await shareLink(viewer.current, panorama.id))}
+          onDone={close}
+        />
         <Toolbar tool={tool} colors={colors} onTool={setTool} onColor={setColor} />
       </div>
       {!isLoaded && !failed && <LoadingSpinner />}
@@ -91,7 +97,9 @@ export default function ViewPage() {
   const [params] = useSearchParams();
   const panorama = PANORAMA_BY_ID.get(params.get('imageId') || DEFAULT_PANORAMA.id);
   const id = panorama?.id;
+  const link = params.get('at');
+  const at = useMemo(() => parseAt(link), [link]);
   useEffect(() => { if (id) recordVisit(id); }, [id]);
   if (!panorama) return <div className="panorama-unavailable"><h1>This place isn’t in the current collection.</h1><Link to="/">Explore places to draw</Link></div>;
-  return <View key={panorama.id} panorama={panorama} />;
+  return <View key={`${panorama.id} ${link}`} panorama={panorama} at={at} />;
 }

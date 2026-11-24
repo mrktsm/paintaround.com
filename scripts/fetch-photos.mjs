@@ -14,7 +14,7 @@ import { renderPanoramaLoadingPreview, renderPanoramaThumbnail } from '../shared
 const STARTERS = ['ph-colosseum', 'ph-palermo_square', 'ph-piazza_san_marco', 'ph-vatican_road', 'ph-circus_maximus_1', 'ph-belvedere'];
 const root = new URL('../', import.meta.url);
 const folder = new URL('client/public/panorama-pool/', root);
-const { items } = JSON.parse(await readFile(new URL('client/src/data/panorama-pool.json', root), 'utf8'));
+const { items } = JSON.parse(await readFile(new URL('shared/panorama-pool.json', root), 'utf8'));
 const file = name => new URL(name, folder).pathname;
 
 async function fetchPhoto({ id, downloadUrl, sha256, thumbnailView }) {
@@ -42,7 +42,7 @@ for (const [n, id] of ids.entries()) {
     continue;
   }
   try {
-    if (!item) throw new Error('not in client/src/data/panorama-pool.json');
+    if (!item) throw new Error('not in shared/panorama-pool.json');
     await fetchPhoto(item);
     console.log(`${label}: done (${item.license}, ${item.author})`);
   } catch (e) {

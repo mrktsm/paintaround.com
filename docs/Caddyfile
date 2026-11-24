@@ -1,0 +1,44 @@
+example.com {
+	root * /var/www/streetview
+	encode zstd gzip
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@layers path /deep-layers/*
+	header @layers Cache-Control "public, max-age=86400"
+
+	# the drawing server
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8787
+	}
+	handle /ws {
+		reverse_proxy 127.0.0.1:8787
+	}
+	# places: the page with the title and picture for chat apps (the plain page if that fails)
+	handle /view {
+		reverse_proxy 127.0.0.1:8787 {
+			@failed status 5xx
+			handle_response @failed {
+				rewrite * /index.html
+				file_server
+			}
+		}
+	}
+	handle_errors {
+		@view path /view
+		handle @view {
+			rewrite * /index.html
+			file_server {
+				status 200
+			}
+		}
+	}
+
+	# data files: real 404s
+	handle /deep-layers/* {
+		file_server
+	}
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}

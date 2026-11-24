@@ -78,7 +78,7 @@ npm run test:browser  # the real app in Chrome; needs photos (and 3D data for mo
 The code is under the [MIT license](LICENSE). These are not covered by it:
 
 - The photos, which come from [Poly Haven](https://polyhaven.com) (CC0) and Wikimedia Commons. Each
-  one's author and license are in `client/src/data/panorama-pool.json`.
+  one's author and license are in `shared/panorama-pool.json`.
 - The textures in `client/public/textures`, by David Revoy (CC0).
 - The map imagery in the picture above: Esri, Vantor, Earthstar Geographics, TomTom, Garmin, FAO, NOAA, USGS
   and the GIS User Community, © OpenStreetMap contributors.

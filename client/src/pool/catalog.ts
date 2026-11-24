@@ -1,5 +1,5 @@
 import { drawnPreviewUrl } from './drawnPreviews';
-import data from '../data/panorama-pool.json';
+import data from '../../../shared/panorama-pool.json';
 
 export type Panorama = {
   id: string; title: string; location: string; appeal: string; category: string;

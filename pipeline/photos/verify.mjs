@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import sharp from 'sharp';
 
 const root = new URL('../../', import.meta.url);
-const pool = JSON.parse(await readFile(new URL('client/src/data/panorama-pool.json', root), 'utf8'));
+const pool = JSON.parse(await readFile(new URL('shared/panorama-pool.json', root), 'utf8'));
 const ids = new Set(), hashes = new Set();
 for (const item of pool.items) {
   if (ids.has(item.id) || hashes.has(item.sha256)) throw new Error(`Duplicate: ${item.id}`);

@@ -31,6 +31,7 @@ export const getPreview = (id: string) => previews.get(id);
 export function schedulePreview(id: string, drawings: () => Drawings) {
   if (!SAFE_ID.test(id)) return;
   sources.set(id, drawings);
+  changed.set(id, Date.now());
   clearTimeout(timers.get(id));
   timers.set(id, setTimeout(() => {
     timers.delete(id);
@@ -40,17 +41,28 @@ export function schedulePreview(id: string, drawings: () => Drawings) {
   }, DEBOUNCE_MS));
 }
 
+/** A place's whole panorama with its drawings, as raw RGB. */
+export async function paintedPanorama(id: string, drawings: Drawings | null) {
+  const base = sharp(`${PANO_DIR}${id}.jpg`).removeAlpha().toColourspace('srgb');
+  const { width: W = 0, height: H = 0 } = await base.metadata();
+  if (!W || !H) return null;
+  // the paint layer first (older paint), fresh strokes on top
+  const layers = drawings ? [...await drawings.layer.overlays(W, H), ...await strokeOverlays(drawings.strokes, W, H)] : [];
+  const flat = await base.composite(layers).raw().toBuffer({ resolveWithObject: true });
+  return sharp(flat.data, { raw: flat.info }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+}
+
+/** When a place's drawings last changed (0: not since the server started). */
+const changed = new Map<string, number>();
+export const drawingsChanged = (id: string) => changed.get(id) ?? 0;
+
 async function render(id: string, { layer, strokes }: Drawings) {
   running.add(id);
   try {
     if (!strokes.length && !layer.tiles.size) { previews.delete(id); return; }
-    const base = sharp(`${PANO_DIR}${id}.jpg`).removeAlpha().toColourspace('srgb');
-    const { width: W = 0, height: H = 0 } = await base.metadata();
-    if (!W || !H) return;
-    // the paint layer first (older paint), fresh strokes on top
-    const layers = [...await layer.overlays(W, H), ...await strokeOverlays(strokes, W, H)];
-    const flat = await base.composite(layers).raw().toBuffer({ resolveWithObject: true });
-    const { data, info } = await sharp(flat.data, { raw: flat.info }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const painted = await paintedPanorama(id, { layer, strokes });
+    if (!painted) return;
+    const { data, info } = painted;
     const cardView = thumbnailViewFor(id);
     const loadingView = loadingViewFor(id, cardView);
     const toJpeg = (view: View) =>

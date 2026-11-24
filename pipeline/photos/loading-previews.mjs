@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { renderPanoramaLoadingPreview } from '../../shared/panoramaProjection.mjs';
 
 const root = new URL('../../', import.meta.url);
-const pool = JSON.parse(await readFile(new URL('client/src/data/panorama-pool.json', root), 'utf8'));
+const pool = JSON.parse(await readFile(new URL('shared/panorama-pool.json', root), 'utf8'));
 for (const [index, item] of pool.items.entries()) {
   await renderPanoramaLoadingPreview(
     new URL(`client/public${item.imageUrl}`, root).pathname,

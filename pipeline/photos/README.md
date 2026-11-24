@@ -2,7 +2,7 @@
 
 How the 200 places were chosen. All photos are 360° × 180°, at least 6000 px wide, and free to use: from
 [Poly Haven](https://polyhaven.com) (CC0) and Wikimedia Commons (CC0, CC BY or CC BY-SA). The catalog,
-`client/src/data/panorama-pool.json`, has each one's author, source and license, and the checksum of the
+`shared/panorama-pool.json`, has each one's author, source and license, and the checksum of the
 original. Positions are the source's; places without one aren't on the map.
 
 - `candidates.json`: the candidates with the sources' own metadata, best first. Squares, streets,

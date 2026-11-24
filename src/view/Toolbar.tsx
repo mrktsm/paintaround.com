@@ -96,16 +96,19 @@ function useScrollFade(ref: RefObject<HTMLElement | null>): string {
     const el = ref.current;
     if (!el) return;
     const update = () => {
-      el.scrollTop = 0; // only sideways (focusing a pen would scroll it up too)
       const left = el.scrollLeft > 2, right = el.scrollWidth - el.clientWidth - el.scrollLeft > 2;
       setFade(!left && !right ? 'none'
         : `linear-gradient(to right, ${left ? 'transparent, black 40px' : 'black calc(100% - 40px)'}${left && right ? ', black calc(100% - 40px)' : ''}${right ? ', transparent' : ''})`);
     };
+    // focusing a pen also scrolls the strip up: undo that, but only then (writing it while the strip
+    // is being scrolled cuts its momentum short on iPhones)
+    const onFocus = () => { if (el.scrollTop) el.scrollTop = 0; };
     update();
     el.addEventListener('scroll', update, { passive: true });
+    el.addEventListener('focusin', onFocus);
     const observer = new ResizeObserver(update);
     observer.observe(el);
-    return () => { el.removeEventListener('scroll', update); observer.disconnect(); };
+    return () => { el.removeEventListener('scroll', update); el.removeEventListener('focusin', onFocus); observer.disconnect(); };
   }, [ref]);
   return fade;
 }

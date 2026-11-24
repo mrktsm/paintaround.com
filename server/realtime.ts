@@ -12,6 +12,8 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { getPreview, previewManifest, schedulePreview } from './previews.ts';
 import { PaintLayer } from './layer.ts';
+import { alertFlagged } from './alerts.ts';
+import { LOG_ONLY, MODERATION_ON, moderate, splitDrawings, type Verdict } from './moderation.ts';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { LIMITS, PEER_COLORS, type ClientMessage, type FinishedStroke, type Peer, type ServerMessage } from '../shared/realtime.ts';
 
@@ -36,8 +38,12 @@ interface Client {
 interface Room {
   id: string;
   clients: Set<Client>;
-  /** fresh strokes, oldest first (undo / erase still work on these) */
-  strokes: Map<string, { stroke: FinishedStroke; bytes: number; added: number }>;
+  /**
+   * fresh strokes, oldest first (undo / erase still work on these). mod: 'pending' until the
+   * author's batch has been checked; only 'ok' strokes get baked into the layer or shown in
+   * previews. 'hold' = the moderator wasn't sure: stays up in the place, kept off the map.
+   */
+  strokes: Map<string, { stroke: FinishedStroke; bytes: number; added: number; author: string; mod: 'pending' | 'ok' | 'hold' }>;
   /** older strokes, flattened into one tiled image */
   layer: PaintLayer;
   flattening: boolean;
@@ -52,7 +58,9 @@ const FLATTEN_AFTER_MS = Number(process.env.FLATTEN_AFTER_MS ?? 3 * 60_000);
 /** All rooms' strokes together stay under this (oldest strokes of the least recent rooms go). */
 const TOTAL_STROKE_BYTES = Number(process.env.TOTAL_STROKE_BYTES ?? 2 * 1024 ** 3);
 let totalBytes = 0;
-const roomDrawings = (room: Room) => () => ({ layer: room.layer, strokes: [...room.strokes.values()].map(s => s.stroke) });
+/** shown in previews (in log-only mode moderation changes nothing, so unchecked strokes show too) */
+const shown = (s: { mod: string }) => s.mod === 'ok' || LOG_ONLY;
+const roomDrawings = (room: Room) => () => ({ layer: room.layer, strokes: [...room.strokes.values()].filter(shown).map(s => s.stroke) });
 function trimMemory(keep: Room) {
   while (totalBytes > TOTAL_STROKE_BYTES) {
     let oldest: Room | null = null;
@@ -199,7 +207,8 @@ function handle(c: Client, raw: string) {
       const old = room.strokes.get(stroke.id);
       if (old) { room.bytes -= old.bytes; totalBytes -= old.bytes; }
       room.strokes.delete(stroke.id); // re-insert = newest (redo)
-      room.strokes.set(stroke.id, { stroke, bytes, added: now });
+      room.strokes.set(stroke.id, { stroke, bytes, added: now, author: from, mod: MODERATION_ON ? 'pending' : 'ok' });
+      if (MODERATION_ON) scheduleModeration(room, from);
       room.bytes += bytes;
       totalBytes += bytes;
       room.touched = now;
@@ -232,11 +241,105 @@ function handle(c: Client, raw: string) {
   }
 }
 
+// ── moderation: once a person stops drawing in a place, their new strokes get checked ──
+/** wait this long after a person's last stroke in a place before checking their batch */
+const QUIET_MS = Number(process.env.MODERATION_QUIET_MS ?? 20_000);
+/** but never longer than this after their first unchecked stroke (someone who never pauses) */
+const MAX_WAIT_MS = Number(process.env.MODERATION_MAX_WAIT_MS ?? 60_000);
+const modTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** when a person's oldest unchecked stroke in a place was drawn */
+const modFirst = new Map<string, number>();
+const modRunning = new Set<string>();
+interface Held { id: string; room: string; stroke: FinishedStroke; at: number; verdict: Verdict; removed: boolean; picture: string }
+/**
+ * removed strokes, kept 24 h so a wrong call can be restored (GET /internal/held, GET
+ * /internal/held/<id>.jpg, POST /internal/restore/<id>). In log-only mode: what would have been removed.
+ */
+const held = new Map<string, Held>();
+const MAX_HELD = 2000;
+
+function scheduleModeration(room: Room, author: string) {
+  const key = `${room.id}\n${author}`;
+  const now = Date.now();
+  if (!modFirst.has(key)) modFirst.set(key, now);
+  const wait = Math.max(1000, Math.min(QUIET_MS, modFirst.get(key)! + MAX_WAIT_MS - now));
+  clearTimeout(modTimers.get(key));
+  modTimers.set(key, setTimeout(() => { modTimers.delete(key); void runModeration(room, author); }, wait));
+}
+
+async function runModeration(room: Room, author: string) {
+  const key = `${room.id}\n${author}`;
+  if (modRunning.has(key)) return scheduleModeration(room, author);
+  modFirst.delete(key);
+  const batch = [...room.strokes.values()].filter(s => s.author === author && s.mod === 'pending');
+  if (!batch.length) return;
+  modRunning.add(key);
+  try {
+    // drawings far apart are judged separately, so one can't hide beside (or take down) another
+    for (const drawing of splitDrawings(batch.map(s => s.stroke))) {
+      const strokes = new Set(drawing);
+      // their own earlier strokes count (half now, half later), unless already flagged; nobody else's do
+      const own = [...room.strokes.values()].filter(s => s.author === author && !strokes.has(s.stroke) && !held.has(s.stroke.id)).map(s => s.stroke);
+      const outcome = await moderate(room.id, drawing, own);
+      const ids: string[] = [];
+      for (const s of batch) {
+        const id = s.stroke.id;
+        if (!strokes.has(s.stroke) || room.strokes.get(id) !== s) continue; // erased (or redone) while checking
+        if (outcome.action === 'allow') { s.mod = 'ok'; continue; }
+        if (outcome.action === 'hold') { s.mod = LOG_ONLY ? 'ok' : 'hold'; ids.push(id); continue; }
+        held.set(id, { id, room: room.id, stroke: s.stroke, at: Date.now(), verdict: outcome.verdict, removed: !LOG_ONLY, picture: outcome.pictures.inContext });
+        if (held.size > MAX_HELD) held.delete(held.keys().next().value!);
+        ids.push(id);
+        if (LOG_ONLY) { s.mod = 'ok'; continue; }
+        room.strokes.delete(id);
+        room.bytes -= s.bytes;
+        totalBytes -= s.bytes;
+      }
+      if (outcome.action === 'allow' || !ids.length) continue;
+      const v = outcome.verdict;
+      const did = outcome.action === 'hold' ? (LOG_ONLY ? 'would hold off the map' : 'held off the map') : (LOG_ONLY ? 'would remove' : 'removed');
+      console.log(`[moderation] ${room.id}: ${did} ${ids.length} stroke(s) (${v.category}/${v.confidence})`); // the reason can quote what was written: memory and alert only, never the log
+      void alertFlagged({ place: room.id, did, strokes: ids.length, category: v.category, reason: v.reason, pictures: outcome.pictures });
+      if (outcome.action === 'remove' && !LOG_ONLY) {
+        // gone for everyone else; the author still sees it (no fight with the filter)
+        const msg = JSON.stringify({ t: 'erase', ids, from: 'moderation' } satisfies ServerMessage);
+        for (const c of room.clients) if (c.peer.id !== author && c.ws.readyState === c.ws.OPEN) c.ws.send(msg);
+      }
+    }
+    schedulePreview(room.id, roomDrawings(room));
+  } catch (e) {
+    // never leave strokes stuck unchecked: anything unexpected means they stay
+    console.warn(`[moderation] ${room.id}: ${(e as Error).message}; allowing`);
+    for (const s of batch) if (s.mod === 'pending') s.mod = 'ok';
+  } finally {
+    modRunning.delete(key);
+  }
+}
+setInterval(() => { const cut = Date.now() - 24 * 3_600_000; for (const [id, h] of held) if (h.at < cut) held.delete(id); }, 600_000);
+
+/** Put a wrongly removed stroke back (approved, so it isn't checked again). */
+function restore(id: string): boolean {
+  const h = held.get(id);
+  if (!h?.removed) return false;
+  held.delete(id);
+  let room = rooms.get(h.room);
+  if (!room) rooms.set(h.room, (room = { id: h.room, clients: new Set(), strokes: new Map(), layer: new PaintLayer(), flattening: false, bytes: 0, touched: Date.now() }));
+  const bytes = h.stroke.image.length;
+  room.strokes.set(id, { stroke: h.stroke, bytes, added: Date.now(), author: 'restore', mod: 'ok' });
+  room.bytes += bytes;
+  totalBytes += bytes;
+  const msg = JSON.stringify({ t: 'stroke_done', stroke: h.stroke, from: 'moderation' } satisfies ServerMessage);
+  for (const c of room.clients) if (c.ws.readyState === c.ws.OPEN) c.ws.send(msg);
+  schedulePreview(room.id, roomDrawings(room));
+  return true;
+}
+
 // ── flattening: strokes older than FLATTEN_AFTER_MS are baked into the room's paint layer ──
 async function flatten(room: Room) {
   if (room.flattening) return;
   const cutoff = Date.now() - FLATTEN_AFTER_MS;
-  const due = [...room.strokes.entries()].filter(([, s]) => s.added <= cutoff);
+  // only checked strokes are baked (pending ones wait for moderation)
+  const due = [...room.strokes.entries()].filter(([, s]) => s.added <= cutoff && s.mod === 'ok');
   if (!due.length) return;
   room.flattening = true;
   try {
@@ -273,6 +376,26 @@ setInterval(() => { for (const room of rooms.values()) void flatten(room); }, Ma
 const http = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   const cors = { 'access-control-allow-origin': '*' };
+  // moderation tools, only from the server itself (anything through the site has X-Forwarded-For)
+  if (url.pathname.startsWith('/internal/')) {
+    if (req.headers['x-forwarded-for'] || !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? '')) { res.writeHead(404).end(); return; }
+    if (req.method === 'GET' && url.pathname === '/internal/held') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify([...held.values()].map(h => ({ id: h.id, place: h.room, at: new Date(h.at).toISOString(), removed: h.removed, ...h.verdict })), null, 2));
+      return;
+    }
+    const pic = url.pathname.match(/^\/internal\/held\/([\w-]{1,64})\.jpg$/);
+    if (req.method === 'GET' && pic) {
+      const h = held.get(pic[1]);
+      if (h) res.writeHead(200, { 'content-type': 'image/jpeg' }).end(Buffer.from(h.picture, 'base64'));
+      else res.writeHead(404).end();
+      return;
+    }
+    const r = url.pathname.match(/^\/internal\/restore\/([\w-]{1,64})$/);
+    if (req.method === 'POST' && r) { const ok = restore(r[1]); res.writeHead(ok ? 200 : 404).end(ok ? 'restored\n' : 'not found\n'); return; }
+    res.writeHead(404).end();
+    return;
+  }
   if (req.method !== 'GET') { res.writeHead(405, cors).end(); return; }
   if (url.pathname === '/api/previews') {
     res.writeHead(200, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' });

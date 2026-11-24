@@ -60,12 +60,6 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   position: absolute;
   inset: 0;
 }
-#root.native .viewer-container {
-  top: calc(-1 * env(safe-area-inset-top, 0px));
-  left: calc(-1 * env(safe-area-inset-left, 0px));
-  right: calc(-1 * env(safe-area-inset-right, 0px));
-  bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-}
 
 /* Reveal the panorama immediately when its image is ready. */
 .viewer-container div[class^="mapillary"] {
@@ -108,10 +102,6 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
 /* Vertical toolbar on the left edge: the original horizontal bar rotated 90°, so its
    base sits on the screen's left edge and the pens emerge pointing right.
    NOTE: rotated local +x = screen down, so shadow offsets below use X, not Y. */
-.toolbar.toolbar--native {
-  left: 0;
-}
-
 .toolbar {
   position: absolute;
   /* Full-height white sidebar on the left edge (iPad palette style). Pens emerge
@@ -1200,8 +1190,7 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
    the bottom, pens rising out of the screen edge. Pens scroll sideways and fade out under the colour picker when they don't fit
    (fade masks set from JS). Undo/redo stay top-left as their own floating buttons. */
 @media (max-width: 599px) {
-  .toolbar,
-  .toolbar.toolbar--native {
+  .toolbar {
     /* full-width strip on the bottom edge — the desktop sidebar, laid along the bottom */
     top: auto;
     left: 0;
@@ -1318,7 +1307,7 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
    corners (the bar is zoomed by --toolbar-scale, so its own lengths are divided by it);
    undo/redo stay top-left. ═══════════════════════════════════════════════════════════════ */
 @media (max-width: 599px) {
-  .toolbar, .toolbar.toolbar--native {
+  .toolbar {
     left: calc(12px / var(--toolbar-scale));
     right: calc(12px / var(--toolbar-scale));
     /* 12px off the edge, or just clear of the home indicator */

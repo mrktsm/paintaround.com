@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSquircle } from './useSquircle';
 import { Viewer, TransitionMode } from 'mapillary-js';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Capacitor } from '@capacitor/core';
 import 'mapillary-js/dist/mapillary.css';
 import './App.css';
 
@@ -1525,7 +1524,7 @@ function App({ panorama }: { panorama: Panorama }) {
           className="undo-redo"
           style={{
             position: 'absolute',
-            top: Capacitor.isNativePlatform() ? 'calc(4px + env(safe-area-inset-top, 0px))' : 'calc(20px + env(safe-area-inset-top, 0px))',
+            top: 'calc(20px + env(safe-area-inset-top, 0px))',
             left: 'calc(14px + env(safe-area-inset-left, 0px))',
             display: 'flex',
             alignItems: 'center',
@@ -1593,7 +1592,7 @@ function App({ panorama }: { panorama: Panorama }) {
           style={{
             pointerEvents: 'auto',
             position: 'absolute',
-            top: Capacitor.isNativePlatform() ? 'calc(4px + env(safe-area-inset-top, 0px))' : 'calc(20px + env(safe-area-inset-top, 0px))',
+            top: 'calc(20px + env(safe-area-inset-top, 0px))',
             right: 'calc(20px + env(safe-area-inset-right, 0px))',
             width: '40px',
             height: '40px',
@@ -1653,7 +1652,7 @@ function App({ panorama }: { panorama: Panorama }) {
         </div>
 
         {/* iOS-inspired Bottom Toolbar */}
-        <div ref={toolbarRef} className={`toolbar${Capacitor.isNativePlatform() ? ' toolbar--native' : ''}`}>
+        <div ref={toolbarRef} className="toolbar">
           {/* Back/Forward Buttons + Pens */}
           <div
             ref={navPenGroupRef}

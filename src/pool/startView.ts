@@ -1,5 +1,5 @@
 /**
- * The camera a panorama opens with, shared by the viewer (view/usePanorama.ts) and the loading-preview
+ * The camera a panorama opens with, shared by the viewer (App.tsx) and the loading-preview
  * renderer (shared/panoramaProjection.mjs) so the preview matches the first frame exactly.
  *
  * Zoom uses Mapillary's scale (0 = widest, 3 = closest): each zoom step halves tan(fov / 2).

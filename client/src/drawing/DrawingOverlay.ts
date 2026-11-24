@@ -159,7 +159,8 @@ export class DrawingOverlay {
 
   // ── Drawing ──
 
-  startStroke(x: number, y: number, color: string, lineWidth: number, toolType: ToolType): void {
+  /** `size`: how much bigger than usual. */
+  startStroke(x: number, y: number, color: string, lineWidth: number, toolType: ToolType, size = 1): void {
     if (!this.viewer) return;
     this.last = [x, y];
     this.moved = false;
@@ -167,8 +168,8 @@ export class DrawingOverlay {
     if (this.scene.isSkyAt(x, y)) return; // not a surface
     this.stroke++;
     for (const c of this.layers) c.style.opacity = "1";
-    if (color === "rainbow" || !this.surface.start(x, y, { color, lineWidth, toolType }, this.stroke)) {
-      this.flat.start(x, y, color, lineWidth, toolType, this.stroke);
+    if (color === "rainbow" || !this.surface.start(x, y, { color, lineWidth, toolType, size }, this.stroke)) {
+      this.flat.start(x, y, color, lineWidth * size, toolType, this.stroke);
     } else {
       this.startFrames();
     }
@@ -274,9 +275,10 @@ export class DrawingOverlay {
   }
 
   /** Show the brush outline at a screen point, and to everyone else (see BrushCursor.show). */
-  updateBrushCursor(x: number, y: number, radius: number, fillColor: string | null = null): void {
-    this.shareCursor(x, y, radius, fillColor);
-    this.cursor.show(x, y, radius, fillColor, (u, v) => this.surface.active?.geo.worldPerPxAt(u, v) ?? null);
+  updateBrushCursor(x: number, y: number, radius: number, size: number, fillColor: string | null = null): void {
+    this.shareCursor(x, y, radius * size, fillColor);
+    // (a stroke in progress has its size in its scale already)
+    this.cursor.show(x, y, radius * size, fillColor, (u, v) => (this.surface.active?.geo.worldPerPxAt(u, v) ?? 0) / size || null);
   }
 
   hideBrushCursor(): void {

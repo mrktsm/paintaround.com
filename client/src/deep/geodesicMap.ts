@@ -169,10 +169,15 @@ export class GeodesicMap {
 
   /** World units per decal px at a basic point (the brush's real size there), or null over the sky. */
   worldPerPxAt(u: number, v: number): number | null {
+    const d = this.distanceAt(u, v);
+    return d > 0 ? this.s / this.k(d) : null;
+  }
+
+  /** How far away a point of the panorama is (0: sky). */
+  distanceAt(u: number, v: number): number {
     const i = Math.min(H - 1, Math.max(0, Math.floor(v * H)));
     const j = (((Math.floor(u * W)) % W) + W) % W;
-    const d = this.data.dist[i * W + j];
-    return d > 0 ? this.s / this.k(d) : null;
+    return this.data.dist[i * W + j];
   }
 
     /** Return this stroke's buffers to the pool (call once the stroke is finished). */

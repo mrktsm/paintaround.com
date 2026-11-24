@@ -13,6 +13,7 @@ import { share, shareLink } from './share';
 import Toolbar from './Toolbar';
 import type { Tool } from './tools';
 import { useLoadingPicture } from './useLoadingPicture';
+import { useBrushSizes } from './useBrushSizes';
 import { usePanorama } from './usePanorama';
 import { usePointer } from './usePointer';
 import { useToolColors } from './useToolColors';
@@ -24,6 +25,7 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
   const container = useRef<HTMLDivElement>(null);
   const [tool, setTool] = useState<Tool>('pencil');
   const [colors, setColor] = useToolColors();
+  const [sizes, resize] = useBrushSizes();
   const [history, setHistory] = useState({ canUndo: false, canRedo: false });
   const readHistory = useCallback((o: DrawingOverlay) => setHistory({ canUndo: o.canUndo(), canRedo: o.canRedo() }), []);
   const { viewer, overlay, isLoaded, isReady, failed } = usePanorama(container, panorama, at, readHistory);
@@ -32,6 +34,8 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
   const pointer = usePointer({
     container, viewer, overlay, tool,
     color: colors[tool === 'eraser' ? 'pencil' : tool],
+    size: sizes[tool],
+    onResize: steps => resize(tool, steps),
     canDraw: isLoaded && isReady && tutorial.state !== 'shown',
     onLookAround: tutorial.dismiss,
   });

@@ -66,7 +66,7 @@ export class Replays {
       st.prev = { basic: b, decal: d, screen: [0, 0] };
       r.mids.push(d);
       if (mid) continue;
-      paintFrame(st, r.mids, b, this.scene.height);
+      paintFrame(st, r.mids, b);
       r.mids = [];
     }
     this.scene.redraw();

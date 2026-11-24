@@ -136,7 +136,7 @@ function folds(st: DecalState, b: [number, number], d: [number, number]): boolea
 }
 
 /** Let a piece's brush paint one frame's points; at = the last one in the panorama. */
-export function paintFrame(st: DecalState, pts: [number, number][], at: [number, number], screenHeight: number): void {
+export function paintFrame(st: DecalState, pts: [number, number][], at: [number, number]): void {
   const g = st.geo;
   st.tool.frame(pts);
   st.painted = pts[pts.length - 1];
@@ -147,8 +147,8 @@ export function paintFrame(st: DecalState, pts: [number, number][], at: [number,
   if (!spots.length) return;
   st.tool.spots = [];
   const far = Math.max(...spots.map((sp) => Math.hypot(sp.x - st.painted[0], sp.y - st.painted[1]) + sp.radius));
-  const radPerPx = ((st.fov * Math.PI) / 180) / Math.max(1, screenHeight);
-  const reach = Math.ceil((far * radPerPx * 1024) / Math.PI) + 4;
+  const scale = g.worldPerPxAt(at[0], at[1]), distance = g.distanceAt(at[0], at[1]);
+  const reach = scale && distance ? Math.ceil((far * scale / distance * 1024) / Math.PI) + 4 : 0; // in panorama pixels
   if (reach > 38) g.openTo(at[0], at[1], Math.min(80, reach), true);
   for (const sp of spots) {
     const b = g.basicAt(sp.x, sp.y);

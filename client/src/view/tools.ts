@@ -15,4 +15,11 @@ export const BRUSH_RADIUS: Record<Tool, number> = {
   eraser: 12,
 };
 
+/** How much bigger or smaller a brush may be made, and by how much at a time. */
+const SIZES = { min: 0.4, max: 2.2, step: 1.12 };
+export function resized(size: number, steps: number): number {
+  const next = Math.min(SIZES.max, Math.max(SIZES.min, size * SIZES.step ** steps));
+  return Math.abs(next - 1) < 0.05 ? 1 : next; // the usual size is easy to get back to
+}
+
 export const lineWidth = (tool: ToolType): number => (tool === 'marker' ? 8 : 3);

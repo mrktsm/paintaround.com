@@ -6,7 +6,13 @@ import type { Scene } from "./scene";
 import type { MarkerTexture, Strokes } from "./strokes";
 import { bakePiece, canPaintSurfaces, continues, MID_SAMPLE, paintFrame, pieceTexture, releasePiece, startPiece, type DecalState } from "./surfaceStrokes";
 
-interface Params { color: string; lineWidth: number; toolType: ToolType }
+interface Params {
+  color: string;
+  lineWidth: number;
+  toolType: ToolType;
+  /** 1 = the usual size. It's the stroke's scale, which others get with it. */
+  size: number;
+}
 
 /**
  * Drawing on 3D surfaces. The path is followed along the surface under the pointer; where it crosses
@@ -203,7 +209,7 @@ export class SurfacePen {
       this.samples.push(+track[i].basic[0].toFixed(6), +track[i].basic[1].toFixed(6), pts[i][0] + (mid ? MID_SAMPLE : 0), pts[i][1]);
     });
     this.sendSamples();
-    paintFrame(st, kept, track[track.length - 1].basic, this.scene.height);
+    paintFrame(st, kept, track[track.length - 1].basic);
   }
 
   /** End a piece: bake it now (it's small), free its surface map, keep the picture on screen. */
@@ -239,6 +245,6 @@ export class SurfacePen {
   private newPiece(b: [number, number], worldPerPx?: number): DecalState | null {
     const s = this.scene;
     if (!canPaintSurfaces(s) || !this.params) return null;
-    return startPiece(s.deep, b, s.radPerPx, worldPerPx, false, this.params, Math.floor(Math.random() * 2 ** 31), this.group, s.fov);
+    return startPiece(s.deep, b, s.radPerPx * this.params.size, worldPerPx, false, this.params, Math.floor(Math.random() * 2 ** 31), this.group, s.fov);
   }
 }

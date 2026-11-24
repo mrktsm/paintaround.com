@@ -10,6 +10,10 @@ interface Options {
   overlay: RefObject<DrawingOverlay | null>;
   tool: Tool;
   color: string;
+  /** How big the brush is (1 = the usual size). */
+  size: number;
+  /** Bigger or smaller, by this many steps. */
+  onResize(steps: number): void;
   /** Can be drawn on yet? (Looking around always works.) */
   canDraw: boolean;
   onLookAround(): void;
@@ -20,10 +24,11 @@ interface Options {
  * fingers tapping undo, three redo.
  */
 export function usePointer(options: Options) {
-  const { container } = options;
+  const { container, size } = options;
   const latest = useRef(options);
   useEffect(() => { latest.current = options; });
   const input = useMemo(() => new PointerInput(latest), []);
+  useEffect(() => input.showBrush(), [input, size]);
 
   useEffect(() => {
     const el = container.current;
@@ -56,6 +61,8 @@ class PointerInput {
   /** Several fingers are down, maybe for a tap: how many there were, where they started, since when. */
   private tap: { fingers: number; starts: Map<number, { x: number; y: number }>; since: number; moved: boolean } | null = null;
   private readonly keys = new Set<string>();
+  /** Where the mouse is over the place, when no button is down. */
+  private hover: { x: number; y: number } | null = null;
   private cameraOf: Camera | null = null;
   private readonly options: RefObject<Options>;
 
@@ -132,10 +139,11 @@ class PointerInput {
 
     // the ring under the mouse previews the colour, lit like the stroke; while a button is held the
     // stroke itself is the preview (and the eraser's ring is never filled)
-    const mouse = e.pointerType === 'mouse';
+    const mouse = e.pointerType === 'mouse', radius = this.radius(tool), wait = this.waiting;
+    this.hover = mouse && e.buttons === 0 ? pos : null;
     if (!mouse || this.keys.has('Space')) overlay.hideBrushCursor();
-    else overlay.updateBrushCursor(pos.x, pos.y, BRUSH_RADIUS[tool], tool !== 'eraser' && e.buttons === 0 ? color : null);
-    const radius = BRUSH_RADIUS[tool], wait = this.waiting;
+    else overlay.updateBrushCursor(pos.x, pos.y, BRUSH_RADIUS[tool], this.options.current.size, tool !== 'eraser' && e.buttons === 0 ? color : null);
+
     if (wait) {
       // far and long enough not to be the first finger of a pinch
       if (Math.hypot(pos.x - wait.x, pos.y - wait.y) <= 6 || Date.now() - wait.time <= 80) return;
@@ -179,6 +187,7 @@ class PointerInput {
   };
 
   readonly leave = (e: PointerEvent): void => {
+    this.hover = null;
     this.overlay?.hideBrushCursor();
     this.up(e);
   };
@@ -199,6 +208,16 @@ class PointerInput {
     this.drawing = this.erasing = false;
   }
 
+  /** The brush as it is now, under the mouse (its size changed). */
+  showBrush(): void {
+    const { tool, color, size } = this.options.current, at = this.hover;
+    if (at && !this.keys.has('Space') && !this.keys.has('Shift')) this.overlay?.updateBrushCursor(at.x, at.y, BRUSH_RADIUS[tool], size, tool === 'eraser' ? null : color);
+  }
+
+  private radius(tool: Tool): number {
+    return BRUSH_RADIUS[tool] * this.options.current.size;
+  }
+
   private look(at: { x: number; y: number }, touch: boolean): void {
     this.camera?.start([at], touch);
     this.options.current.container.current?.classList.add('panning');
@@ -206,12 +225,12 @@ class PointerInput {
 
   private begin(overlay: DrawingOverlay, at: { x: number; y: number }, color: string, tool: Tool, shareRing: boolean): void {
     // the ring first, so others get our brush size before the stroke starts
-    if (shareRing) overlay.shareTouchCursor(at.x, at.y, BRUSH_RADIUS[tool], true);
+    if (shareRing) overlay.shareTouchCursor(at.x, at.y, this.radius(tool), true);
     if (tool === 'eraser') {
-      overlay.eraseAt(at.x, at.y, BRUSH_RADIUS.eraser);
+      overlay.eraseAt(at.x, at.y, this.radius(tool));
       this.erasing = true;
     } else {
-      overlay.startStroke(at.x, at.y, color, lineWidth(tool), tool);
+      overlay.startStroke(at.x, at.y, color, lineWidth(tool), tool, this.options.current.size);
       this.drawing = true;
     }
   }
@@ -246,7 +265,7 @@ class PointerInput {
 
   // ── Keys ──
 
-  /** Undo and redo, arrows to look, + and - to zoom, Space and Shift to drag the view. */
+  /** Undo and redo, arrows to look, + and - to zoom, [ and ] for the brush's size, Space and Shift to drag the view. */
   listenToKeys(): () => void {
     const down = (e: KeyboardEvent) => {
       const typing = (e.target as HTMLElement).closest?.('input:not([type="color"]), textarea, [contenteditable]');
@@ -258,6 +277,13 @@ class PointerInput {
         if (!this.options.current.canDraw || this.drawing || this.erasing) return;
         if (redo) this.overlay?.redo();
         else this.overlay?.undo();
+        return;
+      }
+      // (by place too: on many keyboards these need Alt)
+      const steps = e.key === ']' || e.code === 'BracketRight' ? 1 : e.key === '[' || e.code === 'BracketLeft' ? -1 : 0;
+      if (steps) {
+        e.preventDefault();
+        if (!this.drawing && !this.erasing) this.options.current.onResize(steps);
         return;
       }
       if (e.code === 'Space' && (e.target as HTMLElement).closest?.('button')) return; // presses it

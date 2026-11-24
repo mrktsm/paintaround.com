@@ -1,5 +1,5 @@
 import { PEER_COLORS, type ClientMessage, type ServerMessage } from '../../shared/realtime';
-import { deviceId } from '../inkManager';
+import { deviceId } from '../deviceId';
 
 /** This device's cursor colour: the same every visit (hash of the device id). */
 const MY_COLOR = (() => {

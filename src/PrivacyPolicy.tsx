@@ -11,7 +11,7 @@ export default function PrivacyPolicy() {
 
       <Section n={2} heading="What we handle">
         <ul>
-          <li><strong>A random device ID.</strong> Your device creates it and keeps it. It lets us keep track of your ink and helps us stop abuse. It isn't linked to who you are.</li>
+          <li><strong>A random device ID.</strong> Your device creates it and keeps it. It picks your cursor colour and stays on your device. It isn't linked to who you are.</li>
           <li><strong>Your drawings and cursor.</strong> While you're in a place, your cursor position, brush and drawings are sent to our server and passed on live to the other people viewing that place, along with a cursor colour. Finished drawings stay on the place for people who come later and appear in its preview pictures. They aren't linked to you.</li>
           <li><strong>Pictures of new drawings, for moderation.</strong> To keep hateful, sexual, threatening or other harmful drawings off the Service, a picture of your new drawing and the part of the place around it may be checked automatically by an AI model. Anything you draw or write there, including personal information, is part of that picture, so please don't draw anything private.</li>
           <li><strong>Which place you're viewing</strong>, so we can connect you with others viewing the same place.</li>
@@ -35,7 +35,7 @@ export default function PrivacyPolicy() {
       </Section>
 
       <Section n={5} heading="Storage on your device">
-        <p>The Service uses your browser's local storage, not cookies, to remember things on your device: your device ID and ink, the colour you picked for each tool, places you've recently opened, and whether you've seen the tips. This stays on your device.</p>
+        <p>The Service uses your browser's local storage, not cookies, to remember things on your device: your device ID, the colour you picked for each tool, places you've recently opened, and whether you've seen the tips. This stays on your device.</p>
       </Section>
 
       <Section n={6} heading="No tracking">
@@ -43,7 +43,7 @@ export default function PrivacyPolicy() {
       </Section>
 
       <Section n={7} heading="Your choices">
-        <p>You can clear this site's data in your browser settings at any time. That removes your device ID, ink and everything else stored on your device.</p>
+        <p>You can clear this site's data in your browser settings at any time. That removes your device ID and everything else stored on your device.</p>
       </Section>
 
       <Section n={8} heading="Children">

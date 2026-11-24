@@ -5,8 +5,6 @@ import {
 } from "./WebGLDrawingRenderer";
 import rough from "roughjs";
 import getStroke from "perfect-freehand";
-import { supabase, LOCAL_MODE } from "./supabaseClient";
-import { deviceId } from "./inkManager";
 import { applyShading, shadeRegion } from "./deep/strokeShading";
 import { SurfaceDecal, loadDeepData, surfaceRing, type DeepData } from "./deep/surfaceDecal";
 import { GeodesicMap, mergePieces, pieceGrid, type BakedPiece } from "./deep/geodesicMap";
@@ -780,40 +778,6 @@ class Pen {
     }
   }
 
-  async renderSmooth(
-    ctx: CanvasRenderingContext2D,
-    _x: number,
-    _y: number,
-    currentFov: number,
-  ): Promise<void> {
-    if (!this._initialized || this._history.length < 2) return;
-
-    const fovScale = this.referenceFov / currentFov;
-    const projectedPoints = await Promise.all(
-      this._history.map((p) => this._projector([p.basicX, p.basicY])),
-    );
-
-    const validPoints: [number, number][] = [];
-    for (const p of projectedPoints) {
-      if (p) validPoints.push([p[0], p[1]]);
-    }
-    if (validPoints.length < 2) return;
-
-    const baseWidth = this._history[0].width * fovScale;
-
-    ctx.save();
-    ctx.lineCap = ctx.lineJoin = "round";
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = baseWidth * 0.6;
-    ctx.beginPath();
-    ctx.moveTo(validPoints[0][0], validPoints[0][1]);
-    for (let i = 1; i < validPoints.length; i++) {
-      ctx.lineTo(validPoints[i][0], validPoints[i][1]);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
   dispose(): void {
     this._history.length = 0;
   }
@@ -842,7 +806,6 @@ class ChalkBrush {
   referenceFov: number = 90;
 
   private _strokeId: string | null = null;
-  private _projector: Projector;
   private _unprojector: Unprojector;
   private _initialized: boolean = false;
   /** Per-stroke random source: seeded the same for the drawer and everyone watching, so a
@@ -867,7 +830,6 @@ class ChalkBrush {
     screenX: number,
     screenY: number,
     color: string,
-    projector: Projector,
     unprojector: Unprojector,
     size?: number,
     referenceFov?: number,
@@ -878,7 +840,6 @@ class ChalkBrush {
     this.screenY = screenY;
     this.prevScreenX = screenX;
     this.prevScreenY = screenY;
-    this._projector = projector;
     this._unprojector = unprojector;
     if (color !== undefined) this.color = color;
     if (size !== undefined) this.size = size;
@@ -1022,40 +983,6 @@ class ChalkBrush {
     ctx.drawImage(this._offscreen, 0, 0);
   }
 
-  async renderSmooth(
-    ctx: CanvasRenderingContext2D,
-    _x: number,
-    _y: number,
-    currentFov: number,
-  ): Promise<void> {
-    if (!this._initialized || this._history.length < 2) return;
-
-    const fovScale = this.referenceFov / currentFov;
-    const projectedPoints = await Promise.all(
-      this._history.map((p) => this._projector([p.basicX, p.basicY])),
-    );
-
-    const validPoints: [number, number][] = [];
-    for (const p of projectedPoints) {
-      if (p) validPoints.push([p[0], p[1]]);
-    }
-    if (validPoints.length < 2) return;
-
-    const baseWidth = this._history[0].width * fovScale;
-
-    ctx.save();
-    ctx.lineCap = ctx.lineJoin = "round";
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = baseWidth * 0.6;
-    ctx.beginPath();
-    ctx.moveTo(validPoints[0][0], validPoints[0][1]);
-    for (let i = 1; i < validPoints.length; i++) {
-      ctx.lineTo(validPoints[i][0], validPoints[i][1]);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
   dispose(): void {
     this._history.length = 0;
   }
@@ -1087,7 +1014,6 @@ class FountainPenBrush {
   referenceFov: number = 90;
 
   private _strokeId: string | null = null;
-  private _projector: Projector;
   private _unprojector: Unprojector;
   private _initialized: boolean = false;
   setSeed(_seed: number): void {} // no randomness
@@ -1106,7 +1032,6 @@ class FountainPenBrush {
     screenX: number,
     screenY: number,
     color: string,
-    projector: Projector,
     unprojector: Unprojector,
     size?: number,
     referenceFov?: number,
@@ -1117,7 +1042,6 @@ class FountainPenBrush {
     this.screenY = screenY;
     this.prevScreenX = screenX;
     this.prevScreenY = screenY;
-    this._projector = projector;
     this._unprojector = unprojector;
     if (color !== undefined) this.color = color;
     if (size !== undefined) this.size = size;
@@ -1246,60 +1170,6 @@ class FountainPenBrush {
     ctx.drawImage(this._offscreen, 0, 0);
   }
 
-  async renderSmooth(
-    ctx: CanvasRenderingContext2D,
-    _x: number,
-    _y: number,
-    currentFov: number
-  ): Promise<void> {
-    if (!this._initialized || this._history.length < 2) return;
-
-    const fovScale = this.referenceFov / currentFov;
-    const projectedPoints = await Promise.all(
-      this._history.map((p) => this._projector([p.basicX, p.basicY]))
-    );
-
-    const validPoints: [number, number, number][] = [];
-    for (const p of projectedPoints) {
-      if (p) validPoints.push([p[0], p[1], 0.5]);
-    }
-    if (validPoints.length < 2) return;
-
-    const strokeSize = this._history[0].width * fovScale;
-
-    const outlinePoints = getStroke(validPoints, {
-      size: strokeSize,
-      thinning: 0.9,
-      smoothing: 0.5,
-      streamline: 0.5,
-      simulatePressure: true,
-      start: { taper: strokeSize * 2, cap: true },
-      end: { taper: strokeSize * 0.5, cap: false },
-    });
-
-    if (outlinePoints.length < 2) return;
-
-    ctx.save();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-
-    const [firstPt, secondPt] = outlinePoints;
-    ctx.moveTo(firstPt[0], firstPt[1]);
-    ctx.quadraticCurveTo(firstPt[0], firstPt[1],
-      (firstPt[0] + secondPt[0]) / 2, (firstPt[1] + secondPt[1]) / 2);
-
-    let p0 = secondPt;
-    for (let i = 2; i < outlinePoints.length; i++) {
-      const p1 = outlinePoints[i];
-      ctx.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2);
-      p0 = p1;
-    }
-
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
   dispose(): void {
     this._history.length = 0;
     this._inputPoints.length = 0;
@@ -1334,7 +1204,6 @@ class WatercolorBrush {
   referenceFov: number = 90;
 
   private _strokeId: string | null = null;
-  private _projector: Projector;
   private _unprojector: Unprojector;
   private _initialized: boolean = false;
   /** Per-stroke random source: seeded the same for the drawer and everyone watching, so a
@@ -1360,7 +1229,6 @@ class WatercolorBrush {
     screenX: number,
     screenY: number,
     color: string,
-    projector: Projector,
     unprojector: Unprojector,
     size?: number,
     referenceFov?: number,
@@ -1371,7 +1239,6 @@ class WatercolorBrush {
     this.screenY = screenY;
     this.prevScreenX = screenX;
     this.prevScreenY = screenY;
-    this._projector = projector;
     this._unprojector = unprojector;
     if (color !== undefined) this.color = color;
     if (size !== undefined) this.size = size;
@@ -1509,40 +1376,6 @@ class WatercolorBrush {
     ctx.drawImage(this._offscreen, 0, 0);
   }
 
-  async renderSmooth(
-    ctx: CanvasRenderingContext2D,
-    _x: number,
-    _y: number,
-    currentFov: number
-  ): Promise<void> {
-    if (!this._initialized || this._history.length < 2) return;
-
-    const fovScale = this.referenceFov / currentFov;
-    const projectedPoints = await Promise.all(
-      this._history.map((p) => this._projector([p.basicX, p.basicY]))
-    );
-
-    const validPoints: [number, number][] = [];
-    for (const p of projectedPoints) {
-      if (p) validPoints.push([p[0], p[1]]);
-    }
-    if (validPoints.length < 2) return;
-
-    const baseWidth = this._history[0].width * fovScale * 4;
-
-    ctx.save();
-    ctx.lineCap = ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = baseWidth;
-    ctx.beginPath();
-    ctx.moveTo(validPoints[0][0], validPoints[0][1]);
-    for (let i = 1; i < validPoints.length; i++) {
-      ctx.lineTo(validPoints[i][0], validPoints[i][1]);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
   dispose(): void {
     this._history.length = 0;
     this._screenPoints.length = 0;
@@ -1569,9 +1402,8 @@ interface Stroke {
 }
 
 interface MarkerTexture {
-  canvas?: HTMLCanvasElement; // Lazy — created on demand for hit-testing / silhouettes
+  canvas?: HTMLCanvasElement; // Lazy — created on demand
   image?: HTMLImageElement; // For remote strokes loaded via URL
-  silhouetteCanvas?: HTMLCanvasElement; // Clean smooth version for highlight outline (pencil strokes)
   gridBasic: [number, number][][];
   gridRows: number;
   gridCols: number;
@@ -1581,20 +1413,12 @@ interface MarkerTexture {
   cachedProjection?: ([number, number] | null)[][];
   isLocal?: boolean;
   opacity?: number;
-  supabaseId?: string;
   liveId?: string; // id shared with the live room (finished strokes, undo, eraser)
-  pendingDelete?: boolean;
-  fadingOut?: boolean;
-  fadeStartTime?: number;
   needsProjection?: boolean;
   isProjecting?: boolean;
-  deviceId?: string;
-  createdAt?: string;
-  highlighted?: boolean;
   toolType?: "pencil" | "marker" | "crayon" | "fountainPen" | "watercolor";
   brushStrokeId?: string; // Internal brush stroke ID for matching drips/splashes
   strokeGroup?: number; // Pieces of one stroke that crossed surfaces — undone/redone together
-  inkCost?: number; // Total ink spent on this stroke (for refund on erase)
   isRainbow?: boolean; // Rainbow-colored stroke — animates hue continuously
   // Cached WebGL triangle geometry — rebuilt only when cachedProjection changes
   _glPositions?: Float32Array;
@@ -1614,7 +1438,7 @@ function texSource(tex: MarkerTexture): HTMLCanvasElement | HTMLImageElement {
   return tex.canvas || tex.image!;
 }
 
-/** Lazily materialises a canvas from an Image (for hit-testing / silhouettes) */
+/** Lazily materialises a canvas from an Image (to rub parts out) */
 function ensureCanvas(tex: MarkerTexture): HTMLCanvasElement {
   if (tex.canvas) return tex.canvas;
   const img = tex.image!;
@@ -1758,7 +1582,6 @@ interface DecalState {
   start: [number, number]; // panorama point the decal was built at
 }
 
-
 export class DrawingOverlay {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -1773,12 +1596,6 @@ export class DrawingOverlay {
   private isMarkerActive: boolean = false;
   private isPencilActive: boolean = false;
   private _strokeHasMovement: boolean = false;
-  private _currentToolType:
-    | "pencil"
-    | "marker"
-    | "crayon"
-    | "fountainPen"
-    | "watercolor" = "pencil";
   private animationFrameId: number | null = null;
   private currentFov: number = 90;
   private referenceFov: number = 90;
@@ -1821,7 +1638,7 @@ export class DrawingOverlay {
   private currentRenderId: number = 0;
   private _renderPending: boolean = false;
 
-  // Supabase persistence
+  /** The panorama being drawn on. */
   private _imageId: string | null = null;
   /** Precomputed shading (light/shadow) for the current panorama, if available — see deep/strokeShading */
   private _deepShade: Float32Array | null = null;
@@ -1838,12 +1655,8 @@ export class DrawingOverlay {
   /** when recent pieces started: many in a row = a ragged area, so be less eager to split there */
   private _chainTimes: number[] = [];
   private _strokeParams: { color: string; lineWidth: number; toolType: "pencil" | "marker" | "crayon" | "fountainPen" | "watercolor" } | null = null;
-  private _loadedStrokeIds: Set<string> = new Set();
-  private _prefetchedTextures: Map<string, MarkerTexture[]> = new Map();
-
-  // Called when loadStrokes completes (success or error)
-  onStrokesLoaded?: () => void;
-  private _localSupabaseIds: Set<string> = new Set();
+  /** Called once a place is ready to draw on. */
+  onReady?: () => void;
   private useWebGL: boolean = false;
   private _gpuPathLogged: boolean = false;
 
@@ -1858,42 +1671,11 @@ export class DrawingOverlay {
   private _undoStack: UndoEntry[] = [];
   private _redoStack: UndoEntry[] = [];
 
-  // Stroke selection & reporting
-  private highlightedStrokes: Set<MarkerTexture> = new Set();
-
   // Realtime collaboration
   private lastBroadcastTime: number = 0;
   private _isRainbowStroke: boolean = false; // Current stroke is rainbow
-  private _pendingInkCost: number = 0; // Ink cost for current stroke, set by App before endStroke
   private _rainbowAnimFrameId: number | null = null; // Animation loop for rainbow textures
   private _container: HTMLElement | null = null;
-  private _pendingScreenshotFrames: number = 0;
-
-  // Guest mode: strokes render locally but don't save to Supabase
-  private _guestMode: boolean = false;
-  private _unsavedGuestTextures: { texture: MarkerTexture; toolType: "pencil" | "marker" | "crayon" | "fountainPen" | "watercolor" }[] = [];
-
-  // Composite cache — single equirectangular preview image for fast initial load
-  private _compositeTexture: MarkerTexture | null = null;
-  private _compositeGenerating: boolean = false;
-  private _compositeImageId: string | null = null;
-
-  setGuestMode(guest: boolean): void {
-    this._guestMode = guest;
-  }
-
-  hasUnsavedGuestStrokes(): boolean {
-    return this._unsavedGuestTextures.length > 0;
-  }
-
-  /** After auth succeeds, flush all guest strokes to Supabase */
-  async saveGuestStrokes(): Promise<void> {
-    this._guestMode = false;
-    for (const { texture, toolType } of this._unsavedGuestTextures) {
-      await this.saveStrokeTexture(texture, toolType);
-    }
-    this._unsavedGuestTextures = [];
-  }
 
   constructor(container: HTMLElement) {
     preloadDecalTools();
@@ -2023,28 +1805,11 @@ export class DrawingOverlay {
 
     const hueShift = getRainbowHueShift();
 
-    // First pass: highlight outlines behind highlighted textures
-    for (const tex of this.markerTextures) {
-      if (!tex.highlighted) continue;
-      if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
-      if (!tex._gpuVertexCount) continue;
-
-      const highlightCanvas = this.getOrCreateSilhouette(tex);
-      this.webglRenderer.drawGPUProjectedBatch(
-        highlightCanvas,
-        tex._gpuBasicCoords!,
-        tex._gpuTexCoords!,
-        1,
-        true,
-      );
-    }
-
-    // Second pass: all textures normally
     for (const tex of list) {
       if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
       if (!tex._gpuVertexCount) continue;
 
-      const texOpacity = tex.pendingDelete ? 0.4 : (tex.opacity ?? 1);
+      const texOpacity = tex.opacity ?? 1;
       this.webglRenderer.drawGPUProjectedBatch(
         texSource(tex),
         tex._gpuBasicCoords!,
@@ -2445,7 +2210,7 @@ export class DrawingOverlay {
 
   /**
    * Share a finished stroke exactly as we see it: the baked bitmap (3D wrap + lighting
-   * included) and its panorama grid. Called for every finished stroke, signed in or not.
+   * included) and its panorama grid. Called for every finished stroke.
    */
   private shareFinishedStroke(tex: MarkerTexture): Promise<void> {
     this._ownChanges = true;
@@ -2469,7 +2234,7 @@ export class DrawingOverlay {
   renderPreview(view: PreviewView, ss: number): HTMLCanvasElement | null {
     const draws = this.drawList().flatMap((tex) => {
       if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
-      return tex._gpuVertexCount && !tex.pendingDelete
+      return tex._gpuVertexCount
         ? [{ source: texSource(tex), basic: tex._gpuBasicCoords!, uv: tex._gpuTexCoords!, opacity: tex.opacity ?? 1 }]
         : [];
     });
@@ -2984,7 +2749,6 @@ export class DrawingOverlay {
     // Track if this is a rainbow stroke
     this._isRainbowStroke = color === "rainbow";
     this._strokeHasMovement = false;
-    this._currentToolType = toolType;
     const resolvedColor = this._isRainbowStroke ? resolveRainbowColor() : color;
 
     // The sky isn't a surface: don't start a stroke there at all.
@@ -3064,9 +2828,9 @@ export class DrawingOverlay {
   ): Brush | Pen | ChalkBrush | FountainPenBrush | WatercolorBrush {
     switch (toolType) {
       case "marker": return new Brush(x, y, color, projector, unprojector, lineWidth * 4, lineWidth, fov);
-      case "crayon": return new ChalkBrush(x, y, color, projector, unprojector, lineWidth, fov, w, h);
-      case "fountainPen": return new FountainPenBrush(x, y, color, projector, unprojector, lineWidth, fov, w, h);
-      case "watercolor": return new WatercolorBrush(x, y, color, projector, unprojector, lineWidth, fov, w, h);
+      case "crayon": return new ChalkBrush(x, y, color, unprojector, lineWidth, fov, w, h);
+      case "fountainPen": return new FountainPenBrush(x, y, color, unprojector, lineWidth, fov, w, h);
+      case "watercolor": return new WatercolorBrush(x, y, color, unprojector, lineWidth, fov, w, h);
       default: return new Pen(x, y, color, projector, unprojector, lineWidth, fov);
     }
   }
@@ -3118,10 +2882,6 @@ export class DrawingOverlay {
     });
   }
 
-  setStrokeInkCost(cost: number): void {
-    this._pendingInkCost = cost;
-  }
-
   async endStroke(): Promise<void> {
     if (this._activeDecal) return this.endDecalStroke();
     if (this.isMarkerActive && this.brush) {
@@ -3165,431 +2925,6 @@ export class DrawingOverlay {
     this.broadcastStrokeEnd();
   }
 
-  /** Upload a canvas as PNG to Supabase Storage and return the public URL. */
-  private async uploadCanvasToStorage(
-    canvas: HTMLCanvasElement,
-    strokeId: string,
-  ): Promise<string | null> {
-    // Use WebP for ~5-10x smaller files vs PNG (with transparency support).
-    // Try WebP first; if browser doesn't support it, the blob type won't match.
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/webp", 0.85),
-    );
-    const isWebP = blob?.type === 'image/webp';
-    const finalBlob = isWebP ? blob : await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/png"),
-    );
-    if (!finalBlob) return null;
-    const ext = isWebP ? 'webp' : 'png';
-
-    const path = `strokes/${strokeId}.${ext}`;
-    const { error } = await supabase.storage
-      .from("stroke-images")
-      .upload(path, finalBlob, {
-        contentType: finalBlob.type,
-        upsert: true,
-        cacheControl: "31536000",
-      });
-
-    if (error) {
-      console.error("Failed to upload stroke image:", error);
-      return null;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from("stroke-images")
-      .getPublicUrl(path);
-    return urlData?.publicUrl || null;
-  }
-
-  private getGridBBox(gridBasic: [number, number][][]): { minX: number; minY: number; maxX: number; maxY: number } {
-    let minX = 1, minY = 1, maxX = 0, maxY = 0;
-    for (const row of gridBasic) {
-      for (const [x, y] of row) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-    return { minX, minY, maxX, maxY };
-  }
-
-  private async invalidateCompositeCache(imageId: string): Promise<void> {
-    await supabase.from("composite_cache").delete().eq("image_id", imageId);
-    supabase.storage.from("composite-cache").remove([`composites/${imageId}.webp`]);
-  }
-
-  private async generateAndUploadComposite(): Promise<void> {
-    if (!this._imageId || this.markerTextures.length === 0) return;
-    if (this._compositeGenerating) return;
-
-    this._compositeGenerating = true;
-    const imageId = this._imageId;
-    try {
-      const W = 2048, H = 1024;
-      const compositeCanvas = document.createElement("canvas");
-      compositeCanvas.width = W;
-      compositeCanvas.height = H;
-      const ctx = compositeCanvas.getContext("2d")!;
-      ctx.clearRect(0, 0, W, H);
-
-      let strokeCount = 0;
-
-      for (const tex of this.markerTextures) {
-        if (tex.pendingDelete || tex.fadingOut) continue;
-        if (tex === this._compositeTexture) continue;
-        const src = tex.canvas || tex.image;
-        if (!src) continue;
-
-        const bbox = this.getGridBBox(tex.gridBasic);
-        const dx = Math.floor(bbox.minX * W);
-        const dy = Math.floor(bbox.minY * H);
-        const dw = Math.max(1, Math.ceil((bbox.maxX - bbox.minX) * W));
-        const dh = Math.max(1, Math.ceil((bbox.maxY - bbox.minY) * H));
-
-        ctx.drawImage(src, dx, dy, dw, dh);
-        strokeCount++;
-      }
-
-      if (strokeCount === 0 || this._imageId !== imageId) {
-        compositeCanvas.width = 0;
-        compositeCanvas.height = 0;
-        return;
-      }
-
-      const blob = await new Promise<Blob | null>((r) =>
-        compositeCanvas.toBlob(r, "image/webp", 0.85),
-      );
-      if (!blob || this._imageId !== imageId) {
-        compositeCanvas.width = 0;
-        compositeCanvas.height = 0;
-        return;
-      }
-
-      const path = `composites/${imageId}.webp`;
-      const { error } = await supabase.storage
-        .from("composite-cache")
-        .upload(path, blob, {
-          contentType: "image/webp",
-          upsert: true,
-          cacheControl: "3600",
-        });
-
-      if (error) {
-        console.error("Failed to upload composite:", error);
-        compositeCanvas.width = 0;
-        compositeCanvas.height = 0;
-        return;
-      }
-
-      const { data: urlData } = supabase.storage
-        .from("composite-cache")
-        .getPublicUrl(path);
-      if (!urlData?.publicUrl) {
-        compositeCanvas.width = 0;
-        compositeCanvas.height = 0;
-        return;
-      }
-
-      await supabase.from("composite_cache").upsert({
-        image_id: imageId,
-        storage_url: urlData.publicUrl,
-        stroke_count: strokeCount,
-        updated_at: new Date().toISOString(),
-      });
-
-      compositeCanvas.width = 0;
-      compositeCanvas.height = 0;
-    } catch (err) {
-      console.error("Failed to generate composite:", err);
-    } finally {
-      this._compositeGenerating = false;
-    }
-  }
-
-  getImageId(): string | null {
-    return this._imageId;
-  }
-
-  /** Returns the basic-coord centers of all remote drawings. */
-  getRemoteDrawingBasicCenters(): [number, number][] {
-    const centers: [number, number][] = [];
-    for (const tex of this.markerTextures) {
-      if (tex.deviceId === deviceId) continue;
-      if (!tex.gridBasic) continue;
-      let sumX = 0, sumY = 0, count = 0;
-      for (const row of tex.gridBasic) {
-        for (const b of row) {
-          sumX += b[0]; sumY += b[1]; count++;
-        }
-      }
-      if (count === 0) continue;
-      centers.push([sumX / count, sumY / count]);
-    }
-    return centers;
-  }
-
-  /** Capture/update a screenshot for this drawing. */
-  async captureScreenshotForStar(authorDeviceId?: string): Promise<void> {
-    if (!this._imageId) return;
-    // If no authorDeviceId provided, try to get it from highlighted strokes
-    if (!authorDeviceId) {
-      for (const t of this.highlightedStrokes) {
-        if (t.deviceId) { authorDeviceId = t.deviceId; break; }
-      }
-    }
-    // Old strokes without device_id get grouped under 'legacy'
-    if (!authorDeviceId) authorDeviceId = 'legacy';
-    await this.captureScreenshot(authorDeviceId);
-  }
-
-  private async captureScreenshot(authorDeviceId?: string): Promise<void> {
-    if (!this._imageId || !this._container) return;
-
-    // Find Mapillary's canvas (exclude our drawing canvases)
-    const myCanvases = new Set<HTMLCanvasElement>([this.canvas]);
-    if (this.webglRenderer) {
-      myCanvases.add(this.webglRenderer.getCanvas());
-    }
-    const allCanvases = this._container.querySelectorAll("canvas");
-    let mapillaryCanvas: HTMLCanvasElement | null = null;
-    for (const c of allCanvases) {
-      if (!myCanvases.has(c)) {
-        mapillaryCanvas = c;
-        break;
-      }
-    }
-    if (!mapillaryCanvas) return;
-
-    // Temporarily clear selection highlight for clean screenshot
-    const wasHighlighted = new Set<MarkerTexture>();
-    for (const t of this.highlightedStrokes) {
-      t.highlighted = false;
-      wasHighlighted.add(t);
-    }
-
-    // Re-render with cleared highlights
-    if (wasHighlighted.size > 0) {
-      if (this.useWebGL && this.webglRenderer) {
-        this.webglRenderer.clear();
-        await this.renderMarkerTextures();
-      } else {
-        await this.renderMarkerTextures();
-      }
-    }
-
-    // Find bounding box of all drawings in screen space to center the crop
-    const srcW = mapillaryCanvas.width;
-    const srcH = mapillaryCanvas.height;
-    let minX = srcW, minY = srcH, maxX = 0, maxY = 0;
-    let hasLocalBounds = false;
-    for (const tex of this.markerTextures) {
-      if (!tex.cachedProjection) continue;
-      for (const row of tex.cachedProjection) {
-        for (const p of row) {
-          if (!p) continue;
-          minX = Math.min(minX, p[0]);
-          minY = Math.min(minY, p[1]);
-          maxX = Math.max(maxX, p[0]);
-          maxY = Math.max(maxY, p[1]);
-          hasLocalBounds = true;
-        }
-      }
-    }
-    // Determine crop region — center on drawing with padding, maintain 3:4 aspect (matches Discover cards)
-    const W = 300;
-    const H = 400;
-    const aspect = W / H;
-    // Crop a 3:4 region from the canvas, centered on the drawing if possible
-    let sw: number, sh: number, sx: number, sy: number;
-    if (hasLocalBounds) {
-      const drawW = maxX - minX;
-      const drawH = maxY - minY;
-      // Add generous padding — 3x the drawing size, min 400px
-      const padW = Math.max(drawW * 3, 400);
-      const padH = Math.max(drawH * 3, 300);
-      // Enforce 3:4 aspect ratio
-      if (padW / padH > aspect) {
-        sw = padW;
-        sh = padW / aspect;
-      } else {
-        sh = padH;
-        sw = padH * aspect;
-      }
-    } else {
-      // No bounding box — use as much of the canvas as possible at 3:4
-      sw = srcW;
-      sh = srcH;
-    }
-    // Enforce 3:4 aspect ratio and clamp to canvas, preserving ratio
-    if (sw / sh > aspect) {
-      // Too wide — narrow it
-      sw = sh * aspect;
-    } else {
-      // Too tall — shorten it
-      sh = sw / aspect;
-    }
-    if (sw > srcW) { sw = srcW; sh = sw / aspect; }
-    if (sh > srcH) { sh = srcH; sw = sh * aspect; }
-    // Center on drawing if we have bounds, otherwise center on canvas
-    if (hasLocalBounds) {
-      const cx = (minX + maxX) / 2;
-      const cy = (minY + maxY) / 2;
-      sx = Math.max(0, Math.min(cx - sw / 2, srcW - sw));
-      sy = Math.max(0, Math.min(cy - sh / 2, srcH - sh));
-    } else {
-      sx = (srcW - sw) / 2;
-      sy = (srcH - sh) / 2;
-    }
-
-    const offscreen = document.createElement("canvas");
-    offscreen.width = W;
-    offscreen.height = H;
-    const ctx = offscreen.getContext("2d")!;
-
-    // Draw in z-order: Mapillary → WebGL drawing → 2D drawing (cropped to drawing region)
-    // (preserveDrawingBuffer:true is forced on Mapillary's GL context in App.tsx)
-    try {
-      ctx.drawImage(mapillaryCanvas, sx, sy, sw, sh, 0, 0, W, H);
-    } catch (e) {
-      return; // tainted canvas
-    }
-    if (this.webglRenderer) {
-      try {
-        const glCanvas = this.webglRenderer.getCanvas();
-        const scaleX = glCanvas.width / srcW;
-        const scaleY = glCanvas.height / srcH;
-        ctx.drawImage(glCanvas, sx * scaleX, sy * scaleY, sw * scaleX, sh * scaleY, 0, 0, W, H);
-      } catch {}
-    }
-    try {
-      const scaleX = this.canvas.width / srcW;
-      const scaleY = this.canvas.height / srcH;
-      ctx.drawImage(this.canvas, sx * scaleX, sy * scaleY, sw * scaleX, sh * scaleY, 0, 0, W, H);
-    } catch {}
-
-    // Restore selection highlight and re-render
-    for (const t of wasHighlighted) t.highlighted = true;
-    if (wasHighlighted.size > 0) {
-      if (this.useWebGL && this.webglRenderer) {
-        this.webglRenderer.clear();
-        await this.renderMarkerTextures();
-      } else {
-        await this.renderMarkerTextures();
-      }
-    }
-
-    let blob: Blob | null;
-    try {
-      blob = await new Promise<Blob | null>((resolve) =>
-        offscreen.toBlob(resolve, "image/jpeg", 0.8),
-      );
-    } catch (e) {
-      return;
-    }
-    if (!blob) return;
-
-    const screenshotDeviceIdForPath = authorDeviceId || 'local';
-    const path = `screenshots/${this._imageId}_${screenshotDeviceIdForPath}.jpg`;
-    const { error: uploadError } = await supabase.storage.from("screenshots").upload(path, blob, {
-      contentType: "image/jpeg",
-      upsert: true,
-      cacheControl: "31536000",
-    });
-    if (uploadError) return;
-
-    const { data: urlData } = supabase.storage
-      .from("screenshots")
-      .getPublicUrl(path);
-    const screenshotUrl = urlData?.publicUrl;
-    if (!screenshotUrl) return;
-
-    // Add cache-busting timestamp to the URL for display freshness
-    const urlWithTs = `${screenshotUrl}?t=${Date.now()}`;
-    const screenshotDeviceId = authorDeviceId || 'local';
-    const { error: upsertError } = await supabase.from("screenshots").upsert(
-      {
-        image_id: this._imageId,
-        device_id: screenshotDeviceId,
-        screenshot_url: urlWithTs,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "image_id,device_id" },
-    );
-    if (upsertError) return;
-  }
-
-  private async saveStrokeTexture(
-    texture: MarkerTexture,
-    toolType: "pencil" | "marker" | "crayon" | "fountainPen" | "watercolor",
-  ): Promise<void> {
-    if (!this._imageId) return;
-    // Database off (local mode): strokes are shared live only, nothing is uploaded or stored.
-    if (LOCAL_MODE) return;
-
-    // Generate a UUID for the stroke so we can upload the image first
-    const strokeId = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-      /[xy]/g,
-      (c) => {
-        const r = (Math.random() * 16) | 0;
-        const v = c === "x" ? r : (r & 0x3) | 0x8;
-        return v.toString(16);
-      },
-    );
-
-    texture.supabaseId = strokeId;
-    this._loadedStrokeIds.add(strokeId);
-    this._localSupabaseIds.add(strokeId);
-
-    // Upload image to Storage first
-    const url = await this.uploadCanvasToStorage(texture.canvas!, strokeId);
-    if (!url) {
-      console.error("Failed to upload stroke image, aborting save");
-      return;
-    }
-
-    const strokeData = {
-      id: strokeId,
-      image_id: this._imageId,
-      canvas_data: url, // DB gets the real URL right away
-      grid_basic: texture.gridBasic,
-      grid_rows: texture.gridRows,
-      grid_cols: texture.gridCols,
-      src_width: texture.srcWidth,
-      src_height: texture.srcHeight,
-      reference_fov: texture.referenceFov,
-      tool_type: toolType,
-      color: texture.isRainbow ? "rainbow" : "#000",
-      points: [],
-      device_id: deviceId,
-    };
-
-    const { error } = await supabase.from("strokes").insert(strokeData);
-    if (error) {
-      console.error("Failed to save stroke:", error);
-      return;
-    }
-
-    // Invalidate composite cache — new stroke added
-    if (this._imageId) this.invalidateCompositeCache(this._imageId);
-
-    // Schedule screenshot capture — use rAF chain so Mapillary has rendered
-    this._pendingScreenshotFrames++;
-    const captureId = this._pendingScreenshotFrames;
-    let framesLeft = 3;
-    const tick = () => {
-      // Abort if a newer stroke reset the counter
-      if (this._pendingScreenshotFrames !== captureId) return;
-      if (--framesLeft > 0) {
-        requestAnimationFrame(tick);
-      } else {
-        this.captureScreenshot(deviceId);
-      }
-    };
-    requestAnimationFrame(tick);
-  }
-
   private startRenderLoop(): void {
     if (this.animationFrameId !== null) return;
 
@@ -3606,8 +2941,7 @@ export class DrawingOverlay {
         this.pendingTextures.length === 0 &&
         this.pendingPenTextures.length === 0 &&
         this.activeDrops.length === 0 &&
-        this.activeSplashes.length === 0 &&
-        !this.markerTextures.some((t) => t.fadingOut)
+        this.activeSplashes.length === 0
       ) {
         this.animationFrameId = null;
         await this.render();
@@ -3629,17 +2963,6 @@ export class DrawingOverlay {
           if (idx > -1) this.finalizingStrokes.splice(idx, 1);
         }
       }
-
-      // Animate fading-out textures
-      const FADE_DURATION = 500;
-      const now = Date.now();
-      this.markerTextures = this.markerTextures.filter((tex) => {
-        if (!tex.fadingOut) return true;
-        const elapsed = now - (tex.fadeStartTime ?? now);
-        const t = Math.min(elapsed / FADE_DURATION, 1);
-        tex.opacity = 1 - t;
-        return t < 1;
-      });
 
       // paint this frame's path first, so it's on screen this frame
       if (this._activeDecal) this.advanceDecal();
@@ -3678,21 +3001,14 @@ export class DrawingOverlay {
             this.finalizingStrokes.push(stroke);
 
             // Finalize in background
-            const capturedInkCost = this._pendingInkCost;
             this.finalizeStroke(stroke)
               .then((tex) => {
                 this.pendingTextures.push({ stroke, texture: tex as any });
                 if (tex) {
                   tex.brushStrokeId = stroke.brushStrokeId;
-                  tex.inkCost = capturedInkCost;
                   if (this._isRainbowStroke) {
                     tex.isRainbow = true;
                     this._startRainbowAnimationLoop();
-                  }
-                  if (this._guestMode) {
-                    this._unsavedGuestTextures.push({ texture: tex, toolType: "marker" });
-                  } else {
-                    this.saveStrokeTexture(tex, "marker");
                   }
                   void this.shareFinishedStroke(tex);
                 }
@@ -3782,27 +3098,6 @@ export class DrawingOverlay {
         await this.renderShaded(this.brush, this.lastPixelX, this.lastPixelY, this.currentFov);
       }
 
-      // Render highlight outlines AFTER everything (including active brush) so they appear on top
-      if (
-        this.useWebGL &&
-        this.webglRenderer &&
-        this.highlightedStrokes.size > 0
-      ) {
-        for (const tex of this.markerTextures) {
-          if (!tex.highlighted || !tex.cachedProjection) continue;
-          if (tex._glTriCount && tex._glPositions && tex._glTexCoords) {
-            const highlightCanvas = this.getOrCreateSilhouette(tex);
-            this.webglRenderer.drawTexturedTriangleBatch(
-              highlightCanvas,
-              tex._glPositions,
-              tex._glTexCoords,
-              1,
-              true,
-            );
-          }
-        }
-      }
-
       // Process dying pen strokes -> finalize to textures
       for (let i = this.dyingPenStrokes.length - 1; i >= 0; i--) {
         const stroke = this.dyingPenStrokes[i];
@@ -3810,24 +3105,13 @@ export class DrawingOverlay {
           this.finalizingPenStrokes.push(stroke);
 
           // Finalize pen stroke in background
-          const penToolType =
-            this._currentToolType === "marker"
-              ? "pencil"
-              : this._currentToolType;
-          const capturedPenInkCost = this._pendingInkCost;
           this.finalizePenStroke(stroke)
             .then((tex) => {
               this.pendingPenTextures.push({ stroke, texture: tex as any });
               if (tex) {
-                tex.inkCost = capturedPenInkCost;
                 if (this._isRainbowStroke) {
                   tex.isRainbow = true;
                   this._startRainbowAnimationLoop();
-                }
-                if (this._guestMode) {
-                  this._unsavedGuestTextures.push({ texture: tex, toolType: penToolType });
-                } else {
-                  this.saveStrokeTexture(tex, penToolType);
                 }
                 void this.shareFinishedStroke(tex);
               }
@@ -3992,18 +3276,6 @@ export class DrawingOverlay {
 
     await stroke.pen.render(tempCtx, stroke.lastX, stroke.lastY, stroke.fov);
 
-    // Also render a clean smooth version for highlight outline
-    const silhouetteTempCanvas = document.createElement("canvas");
-    silhouetteTempCanvas.width = this.canvas.width;
-    silhouetteTempCanvas.height = this.canvas.height;
-    const silhouetteTempCtx = silhouetteTempCanvas.getContext("2d")!;
-    await stroke.pen.renderSmooth(
-      silhouetteTempCtx,
-      stroke.lastX,
-      stroke.lastY,
-      stroke.fov,
-    );
-
     const pad = isWatercolor ? 150 : 50;
     const bounds = stroke.pen.getBounds();
     const minX = Math.max(0, bounds.minX - pad);
@@ -4024,23 +3296,6 @@ export class DrawingOverlay {
     const croppedCtx = croppedCanvas.getContext("2d")!;
     croppedCtx.drawImage(
       tempCanvas,
-      minX,
-      minY,
-      width,
-      height,
-      0,
-      0,
-      width,
-      height,
-    );
-
-    // Crop silhouette canvas with same bounds
-    const silhouetteCropped = document.createElement("canvas");
-    silhouetteCropped.width = width;
-    silhouetteCropped.height = height;
-    const silhouetteCroppedCtx = silhouetteCropped.getContext("2d")!;
-    silhouetteCroppedCtx.drawImage(
-      silhouetteTempCanvas,
       minX,
       minY,
       width,
@@ -4094,7 +3349,6 @@ export class DrawingOverlay {
       this.bakeShading(croppedCanvas, gridBasic);
       return {
         canvas: croppedCanvas,
-        silhouetteCanvas: silhouetteCropped,
         toolType: resolvedToolType,
         gridBasic,
         gridRows: GRID_ROWS,
@@ -4669,14 +3923,10 @@ export class DrawingOverlay {
       for (const p of pieces) this.webglRenderer?.invalidateTexture(texSource(p.tex));
     }
     tex.isLocal = true;
-    tex.inkCost = this._pendingInkCost;
     this.markerTextures.push(tex);
     this._undoStack.push(tex);
     this._redoStack = [];
     this.onHistoryChange?.();
-    const toolType = st.toolType;
-    if (this._guestMode) this._unsavedGuestTextures.push({ texture: tex, toolType });
-    else void this.saveStrokeTexture(tex, toolType);
     void this.shareFinishedStroke(tex);
     this.render();
   }
@@ -4843,9 +4093,6 @@ export class DrawingOverlay {
     if (isEraseEdit(this._undoStack[this._undoStack.length - 1])) return;
     const tex = this._undoStack.pop() as MarkerTexture | undefined;
     if (!tex) return;
-    // Undone guest strokes must not block navigation or be saved after signing in.
-    this._unsavedGuestTextures = this._unsavedGuestTextures.filter(item => item.texture !== tex);
-
     // Remove drips/splashes belonging to this stroke
     if (tex.brushStrokeId) {
       this.activeDrops = this.activeDrops.filter(
@@ -4865,19 +4112,6 @@ export class DrawingOverlay {
       this.webglRenderer.invalidateTexture(texSource(tex));
     }
 
-    // Delete from Supabase
-    if (tex.supabaseId) {
-      supabase
-        .from("strokes")
-        .delete()
-        .eq("id", tex.supabaseId)
-        .then(({ error }) => {
-          if (error) console.error("Failed to delete stroke on undo:", error);
-        });
-    }
-
-    // Invalidate composite cache — stroke removed
-    if (this._imageId) this.invalidateCompositeCache(this._imageId);
     this.broadcastEraseStrokes([tex]);
 
     this._redoStack.push(tex);
@@ -4907,9 +4141,7 @@ export class DrawingOverlay {
     this.markerTextures.push(tex);
     this._undoStack.push(tex);
 
-    // Re-save to Supabase + upload to Storage
-    this.saveStrokeTexture(tex, tex.toolType || "marker");
-    // ...and put it back for everyone in the live room (same id)
+    // put it back for everyone in the live room (same id)
     void this.shareFinishedStroke(tex);
 
     this.render();
@@ -4938,7 +4170,6 @@ export class DrawingOverlay {
     }
     this._lastErase = [pixelX, pixelY];
     if (!changed) return;
-    if (this._imageId) this.invalidateCompositeCache(this._imageId);
     this.render();
     // others watch it get rubbed out (a few times a second; the final state goes on release)
     const now = performance.now();
@@ -4976,7 +4207,7 @@ export class DrawingOverlay {
     const cu = (u0 + u1) / 2;
     let touched = false;
     for (const tex of this.markerTextures) {
-      if (!tex.isLocal || tex.fadingOut) continue;
+      if (!tex.isLocal) continue;
       const box = eraseBox(tex);
       // compare with the footprint shifted by whole turns towards the stroke (panorama seam)
       const shift = Math.round((box[0] + box[2]) / 2 - cu);
@@ -4992,7 +4223,6 @@ export class DrawingOverlay {
       if (!session.items.has(tex)) {
         if (!tex.canvas && this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(tex));
         session.items.set(tex, { before: copyCanvas(ensureCanvas(tex)), removed: false });
-        tex.silhouetteCanvas = undefined; // rebuilt from the trimmed bitmap if ever needed
       }
       const canvas = tex.canvas!;
       const ctx = canvas.getContext("2d")!;
@@ -5011,14 +4241,13 @@ export class DrawingOverlay {
 
   /**
    * End of an eraser gesture: strokes rubbed out completely are removed, the rest are re-shared
-   * trimmed; the whole gesture becomes one undo step. Returns the ink of fully erased strokes.
+   * trimmed; the whole gesture becomes one undo step.
    */
-  finalizeEraser(): number {
+  finalizeEraser(): void {
     this._lastErase = null;
     const session = this._eraseSession;
     this._eraseSession = null;
-    if (!session) return 0;
-    let inkRefund = 0;
+    if (!session) return;
     const removed: MarkerTexture[] = [];
     for (const [tex, item] of session.items) {
       if (!tex.canvas) continue;
@@ -5026,7 +4255,6 @@ export class DrawingOverlay {
       if (isBlank(tex.canvas)) {
         item.removed = true;
         removed.push(tex);
-        inkRefund += tex.inkCost || 0;
         const i = this.markerTextures.indexOf(tex);
         if (i > -1) this.markerTextures.splice(i, 1);
         if (this.webglRenderer) this.webglRenderer.invalidateTexture(tex.canvas);
@@ -5037,9 +4265,7 @@ export class DrawingOverlay {
     if (removed.length) this.broadcastEraseStrokes(removed);
     this._undoStack.push(session);
     this._redoStack = [];
-    if (this._imageId) this.invalidateCompositeCache(this._imageId);
     this.render();
-    return inkRefund;
   }
 
   /** Put an erase gesture's strokes back to before (undo) or after (redo) it. */
@@ -5062,272 +4288,7 @@ export class DrawingOverlay {
       void this.shareFinishedStroke(tex);
     }
     if (gone.length) this.broadcastEraseStrokes(gone);
-    if (this._imageId) this.invalidateCompositeCache(this._imageId);
     this.render();
-  }
-
-  /** Get or lazily create the silhouette canvas for a pencil texture. */
-  private getOrCreateSilhouette(tex: MarkerTexture): HTMLCanvasElement {
-    if (
-      !tex.silhouetteCanvas &&
-      (tex.toolType === "pencil" || tex.toolType === "crayon" || tex.toolType === "fountainPen" || tex.toolType === "watercolor")
-    ) {
-      tex.silhouetteCanvas = this.createSilhouette(ensureCanvas(tex));
-    }
-    return tex.silhouetteCanvas || ensureCanvas(tex);
-  }
-
-  private createSilhouette(source: HTMLCanvasElement): HTMLCanvasElement {
-    // Create a solid dilated version of the source for clean highlight outlines.
-    // Draws the source image at multiple offsets to fill in roughjs gaps,
-    // then composites to solid white.
-    const spread = 3;
-    const c = document.createElement("canvas");
-    c.width = source.width;
-    c.height = source.height;
-    const ctx = c.getContext("2d")!;
-
-    // Draw the source at multiple offsets to dilate
-    for (let dy = -spread; dy <= spread; dy += 2) {
-      for (let dx = -spread; dx <= spread; dx += 2) {
-        if (dx * dx + dy * dy > (spread + 1) * (spread + 1)) continue;
-        ctx.drawImage(source, dx, dy);
-      }
-    }
-
-    // Convert everything to solid white (keep alpha, replace color)
-    ctx.globalCompositeOperation = "source-in";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.globalCompositeOperation = "source-over";
-
-    return c;
-  }
-
-  getMarkerTextureCount(): number {
-    return this.markerTextures.length;
-  }
-
-  hitTestAt(pixelX: number, pixelY: number): Promise<MarkerTexture | null> {
-    if (!this.viewer) return Promise.resolve(null);
-
-    return this.viewer.unprojectToBasic([pixelX, pixelY]).then((basicPoint) => {
-      if (!basicPoint) return null;
-
-      const bx = basicPoint[0];
-      const by = basicPoint[1];
-
-      // Search in reverse order (top-most stroke first)
-      for (let i = this.markerTextures.length - 1; i >= 0; i--) {
-        const tex = this.markerTextures[i];
-        if (tex.pendingDelete) continue;
-        if (tex.deviceId === deviceId) continue; // Skip own drawings
-
-        let hit = false;
-
-        for (let r = 0; r < tex.gridRows && !hit; r++) {
-          for (let c = 0; c < tex.gridCols && !hit; c++) {
-            const tl = tex.gridBasic[r][c];
-            const tr = tex.gridBasic[r][c + 1];
-            const bl = tex.gridBasic[r + 1][c];
-            const br = tex.gridBasic[r + 1][c + 1];
-
-            const minX = Math.min(tl[0], tr[0], bl[0], br[0]);
-            const maxX = Math.max(tl[0], tr[0], bl[0], br[0]);
-            const minY = Math.min(tl[1], tr[1], bl[1], br[1]);
-            const maxY = Math.max(tl[1], tr[1], bl[1], br[1]);
-
-            const margin = 0.003;
-            if (
-              bx < minX - margin ||
-              bx > maxX + margin ||
-              by < minY - margin ||
-              by > maxY + margin
-            )
-              continue;
-
-            const cellWidth = tex.srcWidth / tex.gridCols;
-            const cellHeight = tex.srcHeight / tex.gridRows;
-
-            const rangeX = maxX - minX;
-            const rangeY = maxY - minY;
-            if (rangeX < 0.0001 || rangeY < 0.0001) continue;
-
-            const u = (bx - minX) / rangeX;
-            const v = (by - minY) / rangeY;
-
-            const texX = Math.floor((c + u) * cellWidth);
-            const texY = Math.floor((r + v) * cellHeight);
-
-            if (
-              texX < 0 ||
-              texX >= tex.srcWidth ||
-              texY < 0 ||
-              texY >= tex.srcHeight
-            )
-              continue;
-
-            const hitCanvas2 = ensureCanvas(tex);
-            const ctx = hitCanvas2.getContext("2d");
-            if (!ctx) continue;
-
-            const sampleRadius = 4;
-            const sampleX2 = Math.max(0, texX - sampleRadius);
-            const sampleY2 = Math.max(0, texY - sampleRadius);
-            const sampleW2 = Math.min(
-              hitCanvas2.width - sampleX2,
-              sampleRadius * 2 + 1,
-            );
-            const sampleH2 = Math.min(
-              hitCanvas2.height - sampleY2,
-              sampleRadius * 2 + 1,
-            );
-            if (sampleW2 > 0 && sampleH2 > 0) {
-              const imageData2 = ctx.getImageData(
-                sampleX2,
-                sampleY2,
-                sampleW2,
-                sampleH2,
-              ).data;
-              for (let dy = 0; dy < sampleH2 && !hit; dy += 2) {
-                for (let dx = 0; dx < sampleW2 && !hit; dx += 2) {
-                  if (imageData2[(dy * sampleW2 + dx) * 4 + 3] > 10) {
-                    hit = true;
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        if (hit) return tex;
-      }
-
-      return null;
-    });
-  }
-
-  getRelatedStrokes(texture: MarkerTexture): MarkerTexture[] {
-    if (texture.deviceId) {
-      return this.markerTextures.filter((t) => t.deviceId === texture.deviceId);
-    }
-
-    // Fallback: group old strokes (no deviceId) by time proximity
-    if (!texture.createdAt) return [texture];
-
-    const clickedTime = new Date(texture.createdAt).getTime();
-    return this.markerTextures.filter((t) => {
-      if (t.deviceId) return false; // Only group strokes without deviceId
-      if (!t.createdAt) return false;
-      const tTime = new Date(t.createdAt).getTime();
-      return Math.abs(tTime - clickedTime) < 60000; // 60 seconds
-    });
-  }
-
-  selectStroke(texture: MarkerTexture): { strokeIds: string[]; authorDeviceId?: string } {
-    this.clearSelection();
-    const related = this.getRelatedStrokes(texture);
-    const strokeIds: string[] = [];
-    for (const t of related) {
-      t.highlighted = true;
-      this.highlightedStrokes.add(t);
-      if (t.supabaseId) strokeIds.push(t.supabaseId);
-    }
-    this.render();
-    return { strokeIds, authorDeviceId: texture.deviceId };
-  }
-
-  clearSelection(): void {
-    if (this.highlightedStrokes.size === 0) return;
-    for (const t of this.highlightedStrokes) {
-      t.highlighted = false;
-    }
-    this.highlightedStrokes.clear();
-    this.render();
-  }
-
-  async adminDeleteStrokes(strokeIds: string[]): Promise<void> {
-    if (strokeIds.length === 0) return;
-
-    const fadeStartTime = Date.now();
-    for (const strokeId of strokeIds) {
-      const tex = this.markerTextures.find((t) => t.supabaseId === strokeId);
-      if (tex) {
-        tex.fadingOut = true;
-        tex.fadeStartTime = fadeStartTime;
-      }
-    }
-    this.clearSelection();
-    this.startRenderLoop();
-
-    // Delete strokes and any associated reports from DB
-    for (const strokeId of strokeIds) {
-      await supabase.from("reports").delete().eq("stroke_id", strokeId);
-      await supabase.from("strokes").delete().eq("id", strokeId);
-    }
-
-    // Invalidate composite cache — strokes deleted by admin
-    if (this._imageId) this.invalidateCompositeCache(this._imageId);
-  }
-
-  async reportStrokes(strokeIds: string[]): Promise<boolean> {
-    if (strokeIds.length === 0) return false;
-
-    // Filter out self-reports
-    const reportable = strokeIds.filter((id) => {
-      const tex = this.markerTextures.find((t) => t.supabaseId === id);
-      return !tex || tex.deviceId !== deviceId;
-    });
-    if (reportable.length === 0) return false;
-
-    // Fade all reported textures out simultaneously
-    const fadeStartTime = Date.now();
-    for (const strokeId of reportable) {
-      const tex = this.markerTextures.find((t) => t.supabaseId === strokeId);
-      if (tex) {
-        tex.fadingOut = true;
-        tex.fadeStartTime = fadeStartTime;
-      }
-    }
-    this.clearSelection();
-    this.startRenderLoop();
-
-    // Do DB work in the background
-    (async () => {
-      for (const strokeId of reportable) {
-        const { error: insertError } = await supabase
-          .from("reports")
-          .insert({ stroke_id: strokeId, reporter_device_id: deviceId });
-
-        if (insertError) continue; // Likely duplicate
-
-        const { count, error: countError } = await supabase
-          .from("reports")
-          .select("*", { count: "exact", head: true })
-          .eq("stroke_id", strokeId);
-
-        if (!countError && count !== null && count >= 3) {
-          await supabase.from("reports").delete().eq("stroke_id", strokeId);
-          await supabase.from("strokes").delete().eq("id", strokeId);
-          // Invalidate composite cache — stroke removed by reports
-          if (this._imageId) this.invalidateCompositeCache(this._imageId);
-        }
-      }
-    })();
-
-    return true;
-  }
-
-  clearAll(): void {
-    this.strokes = [];
-    this.markerTextures = [];
-    if (this.brush) {
-      this.brush.dispose();
-    }
-    if (this.webglRenderer) {
-      this.webglRenderer.clearTextureCache();
-    }
-    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   private getSyncProjectionContext(): any {
@@ -5386,30 +4347,12 @@ export class DrawingOverlay {
       if (gpuUniforms) {
         this.webglRenderer.setGPUProjectionUniforms(gpuUniforms);
 
-        // First pass: render highlight outlines behind highlighted textures
-        for (const tex of this.markerTextures) {
-          if (!tex.highlighted) continue;
-          if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
-          if (!tex._gpuVertexCount) continue;
-
-          const highlightCanvas = this.getOrCreateSilhouette(tex);
-          this.webglRenderer.drawGPUProjectedBatch(
-            highlightCanvas,
-            tex._gpuBasicCoords!,
-            tex._gpuTexCoords!,
-            1,
-            true,
-            0,
-          );
-        }
-
-        // Second pass: render all textures normally
         const hueShift = getRainbowHueShift();
         for (const tex of list) {
           if (!tex._gpuBasicCoords) this.buildGPUGeometry(tex);
           if (!tex._gpuVertexCount) continue;
 
-          const texOpacity = tex.pendingDelete ? 0.4 : (tex.opacity ?? 1);
+          const texOpacity = tex.opacity ?? 1;
           this.webglRenderer.drawGPUProjectedBatch(
             texSource(tex),
             tex._gpuBasicCoords!,
@@ -5500,7 +4443,7 @@ export class DrawingOverlay {
 
     for (const tex of this.markerTextures) {
       if (!tex.cachedProjection) continue;
-      const texOpacity = tex.pendingDelete ? 0.4 : (tex.opacity ?? 1);
+      const texOpacity = tex.opacity ?? 1;
 
       if (this.useWebGL && this.webglRenderer) {
         if (tex._glTriCount && tex._glPositions && tex._glTexCoords) {
@@ -5718,153 +4661,6 @@ export class DrawingOverlay {
     });
   }
 
-  private _prefetchDone: Set<string> = new Set();
-
-  /** Start fetching + decoding strokes before the viewer is ready.
-   *  Called from App.tsx as soon as we know the imageId. */
-  prefetchStrokes(imageId: string): void {
-    if (this._prefetchedTextures.has(imageId)) return;
-    // Mark as in-progress so we don't duplicate
-    this._prefetchedTextures.set(imageId, []);
-    this._doPrefetch(imageId);
-  }
-
-  private _buildCompositeTexture(img: HTMLImageElement): MarkerTexture {
-    const ROWS = 8, COLS = 16;
-    const gridBasic: [number, number][][] = [];
-    for (let r = 0; r <= ROWS; r++) {
-      const row: [number, number][] = [];
-      for (let c = 0; c <= COLS; c++) {
-        row.push([c / COLS, r / ROWS]);
-      }
-      gridBasic.push(row);
-    }
-    return {
-      image: img,
-      gridBasic,
-      gridRows: ROWS,
-      gridCols: COLS,
-      srcWidth: img.naturalWidth,
-      srcHeight: img.naturalHeight,
-      referenceFov: 90,
-      isLocal: false,
-    };
-  }
-
-  private async _doPrefetch(imageId: string): Promise<void> {
-    // Fetch composite cache in parallel with individual strokes
-    const compositePromise = supabase
-      .from("composite_cache")
-      .select("storage_url")
-      .eq("image_id", imageId)
-      .maybeSingle();
-
-    // Fire composite load immediately (non-blocking)
-    compositePromise.then(async ({ data: cacheRow }) => {
-      if (!cacheRow?.storage_url) return;
-      // Skip if individuals already loaded or navigated away
-      if (this._prefetchDone.has(imageId) || this._imageId !== imageId) return;
-      try {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = cacheRow.storage_url;
-        if (img.decode) {
-          await img.decode();
-        } else {
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve();
-            img.onerror = reject;
-          });
-        }
-        // Re-check after async load
-        if (this._prefetchDone.has(imageId) || this._imageId !== imageId) return;
-        this._compositeTexture = this._buildCompositeTexture(img);
-        this._compositeImageId = imageId;
-      } catch {
-        // Composite load failed — individual strokes will handle it
-      }
-    });
-
-    const reportsPromise = supabase
-      .from("reports")
-      .select("stroke_id")
-      .eq("reporter_device_id", deviceId);
-
-    const PAGE = 1000;
-    let offset = 0;
-    const textures: MarkerTexture[] = [];
-
-    const reportsResult = await reportsPromise;
-    const reportedStrokeIds = new Set<string>(
-      (reportsResult.data || []).map((r: any) => r.stroke_id),
-    );
-
-    while (true) {
-      const { data: page, error } = await supabase
-        .from("strokes")
-        .select("*")
-        .eq("image_id", imageId)
-        .is("hidden_at", null)
-        .order("created_at", { ascending: true })
-        .range(offset, offset + PAGE - 1);
-      if (error || !page || page.length === 0) break;
-
-      const pending = page.filter((row: any) => {
-        if (reportedStrokeIds.has(row.id)) return false;
-        if (!row.canvas_data || !row.grid_basic) return false;
-        return true;
-      });
-
-      const CONCURRENT = 50;
-      let currentIndex = 0;
-      const results: (MarkerTexture | null)[] = new Array(pending.length).fill(null);
-
-      const workers = Array.from({ length: CONCURRENT }).map(async () => {
-        while (currentIndex < pending.length) {
-          const idx = currentIndex++;
-          const row = pending[idx];
-          try {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.src = row.canvas_data;
-            row.canvas_data = null;
-            if (img.decode) {
-              await img.decode();
-            } else {
-              await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = () => reject();
-              });
-            }
-            results[idx] = {
-              image: img,
-              toolType: row.tool_type || undefined,
-              gridBasic: row.grid_basic as [number, number][][],
-              gridRows: row.grid_rows || 12,
-              gridCols: row.grid_cols || 12,
-              srcWidth: row.src_width || img.naturalWidth,
-              srcHeight: row.src_height || img.naturalHeight,
-              referenceFov: row.reference_fov || 90,
-              supabaseId: row.id,
-              deviceId: row.device_id || undefined,
-              createdAt: row.created_at || undefined,
-              isRainbow: row.color === "rainbow",
-            };
-          } catch {}
-        }
-      });
-      await Promise.all(workers);
-      for (const tex of results) {
-        if (tex) textures.push(tex);
-      }
-      if (page.length < PAGE) break;
-      offset += PAGE;
-    }
-
-    this._prefetchedTextures.set(imageId, textures);
-    this._prefetchDone.add(imageId);
-  }
-
   setImageId(imageId: string): void {
     this._imageId = imageId;
     this._deepShade = null;
@@ -5875,176 +4671,8 @@ export class DrawingOverlay {
       this._deepShade = data?.surface ?? null;
       console.info(`[deep] ${imageId}: ${data ? "3D surface painting ON (depth + shading loaded)" : "no deep data for this panorama — strokes stay flat"}`);
     });
-    this._loadedStrokeIds.clear();
-    // Clear composite state from previous location
-    this._compositeTexture = null;
-    this._compositeImageId = null;
-    this.loadStrokes(imageId);
-  }
-
-  private _removeCompositeTexture(): void {
-    if (!this._compositeTexture) return;
-    const compIdx = this.markerTextures.indexOf(this._compositeTexture);
-    if (compIdx > -1) {
-      if (this.webglRenderer) {
-        this.webglRenderer.invalidateTexture(texSource(this._compositeTexture));
-      }
-      this.markerTextures.splice(compIdx, 1);
-    }
-    this._compositeTexture = null;
-    this._compositeImageId = null;
-  }
-
-  async loadStrokes(imageId: string): Promise<void> {
-    if (!this.viewer) return;
-
-    // Show composite immediately if available (instant first paint)
-    if (this._compositeTexture && this._compositeImageId === imageId) {
-      this.markerTextures.push(this._compositeTexture);
-      this.render();
-    }
-
-    // If prefetch is in progress, wait for it to complete
-    if (this._prefetchedTextures.has(imageId) && !this._prefetchDone.has(imageId)) {
-      while (!this._prefetchDone.has(imageId)) {
-        await new Promise<void>((r) => setTimeout(r, 50));
-        if (this._imageId !== imageId) return; // Navigated away
-      }
-    }
-
-    // Use prefetched strokes if available
-    const prefetched = this._prefetchedTextures.get(imageId);
-    if (prefetched !== undefined) {
-      // Remove composite now that individuals are ready
-      this._removeCompositeTexture();
-
-      let hasRainbow = false;
-      for (const tex of prefetched) {
-        if (!this._loadedStrokeIds.has(tex.supabaseId!)) {
-          this._loadedStrokeIds.add(tex.supabaseId!);
-          this.markerTextures.push(tex);
-          if (tex.isRainbow) hasRainbow = true;
-        }
-      }
-      this._prefetchedTextures.delete(imageId);
-      this._prefetchDone.delete(imageId);
-      if (hasRainbow) this._startRainbowAnimationLoop();
-      this.render();
-      this.onStrokesLoaded?.();
-      // Generate composite for next visitor if none existed
-      this.generateAndUploadComposite();
-      return;
-    }
-
-    // Fallback: normal load (no prefetch available)
-    const reportsPromise = supabase
-      .from("reports")
-      .select("stroke_id")
-      .eq("reporter_device_id", deviceId);
-
-    const PAGE = 1000;
-    let offset = 0;
-    let hasRainbow = false;
-    let processed = 0;
-
-    const reportsResult = await reportsPromise;
-    const reportedStrokeIds = new Set<string>(
-      (reportsResult.data || []).map((r: any) => r.stroke_id),
-    );
-
-    while (true) {
-      const { data: page, error } = await supabase
-        .from("strokes")
-        .select("*")
-        .eq("image_id", imageId)
-        .is("hidden_at", null)
-        .order("created_at", { ascending: true })
-        .range(offset, offset + PAGE - 1);
-      if (error) {
-        console.error("Failed to load strokes:", error);
-        this.onStrokesLoaded?.();
-        return;
-      }
-      if (!page || page.length === 0) break;
-
-      // Filter to rows we haven't loaded yet
-      const pending = page.filter((row: any) => {
-        if (this._loadedStrokeIds.has(row.id)) return false;
-        if (reportedStrokeIds.has(row.id)) return false;
-        if (!row.canvas_data || !row.grid_basic) return false;
-        this._loadedStrokeIds.add(row.id);
-        return true;
-      });
-
-      // Load images concurrently — browser handles HTTP/2 multiplexing.
-      // Higher concurrency = faster total load, but too high causes mobile crashes.
-      const CONCURRENT = 50;
-      let currentIndex = 0;
-      const results: (MarkerTexture | null)[] = new Array(pending.length).fill(null);
-
-      const workers = Array.from({ length: CONCURRENT }).map(async () => {
-        while (currentIndex < pending.length) {
-          if (this._imageId !== imageId) return; // Navigated away — abort
-          const idx = currentIndex++;
-          const row = pending[idx];
-          try {
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.src = row.canvas_data;
-            row.canvas_data = null;
-            if (img.decode) {
-              await img.decode();
-            } else {
-              await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = () => reject();
-              });
-            }
-
-            const isRainbow = row.color === "rainbow";
-            if (isRainbow) hasRainbow = true;
-
-            results[idx] = {
-              image: img,
-              toolType: row.tool_type || undefined,
-              gridBasic: row.grid_basic as [number, number][][],
-              gridRows: row.grid_rows || 12,
-              gridCols: row.grid_cols || 12,
-              srcWidth: row.src_width || img.naturalWidth,
-              srcHeight: row.src_height || img.naturalHeight,
-              referenceFov: row.reference_fov || 90,
-              supabaseId: row.id,
-              deviceId: row.device_id || undefined,
-              createdAt: row.created_at || undefined,
-              isRainbow,
-            };
-
-            processed++;
-          } catch {
-            // Skip failed stroke
-          }
-        }
-      });
-
-      await Promise.all(workers);
-
-      // Push in original order so newer strokes render on top
-      for (const tex of results) {
-        if (tex) this.markerTextures.push(tex);
-      }
-
-      if (page.length < PAGE) break;
-      offset += PAGE;
-    }
-
-    // Remove composite now that individuals are ready
-    this._removeCompositeTexture();
-
-    if (hasRainbow) this._startRainbowAnimationLoop();
     this.render();
-    this.onStrokesLoaded?.();
-    // Generate composite for next visitor if none existed
-    this.generateAndUploadComposite();
+    this.onReady?.();
   }
 
   fadeIn(): void {
@@ -6172,11 +4800,6 @@ export class DrawingOverlay {
         tex.canvas.width = 0;
         tex.canvas.height = 0;
       }
-      if ((tex as any).silhouetteCanvas) {
-        (tex as any).silhouetteCanvas.width = 0;
-        (tex as any).silhouetteCanvas.height = 0;
-        (tex as any).silhouetteCanvas = null;
-      }
       if ((tex as any)._glGeometry) {
         (tex as any)._glGeometry = null;
       }
@@ -6184,8 +4807,6 @@ export class DrawingOverlay {
     this.markerTextures = [];
     this._undoStack = [];
     this._redoStack = [];
-    this._compositeTexture = null;
-    this._compositeImageId = null;
 
     if (this.webglRenderer) {
       this.webglRenderer.dispose();

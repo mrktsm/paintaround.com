@@ -22,7 +22,7 @@ import { DARK_UI } from './theme';
 /** Tool body for the current appearance (tips/bands are shared). */
 const toolBase = (name: string) => `/tools/${name}-base${DARK_UI ? '-dark' : ''}.png`;
 
-// Force preserveDrawingBuffer on all WebGL contexts so we can capture screenshots
+// Keep WebGL canvases readable after they are shown
 const _origGetContext = HTMLCanvasElement.prototype.getContext;
 HTMLCanvasElement.prototype.getContext = function(this: HTMLCanvasElement, type: string, attrs?: any) {
   if (type === 'webgl' || type === 'webgl2') {
@@ -108,7 +108,7 @@ function App({ panorama }: { panorama: Panorama }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [showLoadingSpinner, setShowLoadingSpinner] = useState(false);
   const [viewerError, setViewerError] = useState('');
-  const [isStrokesLoading, setIsStrokesLoading] = useState(true);
+  const [isPreparing, setIsPreparing] = useState(true);
   useEffect(() => {
     if (isLoaded) return;
     const timer = setTimeout(() => setShowLoadingSpinner(true), 300);
@@ -270,7 +270,7 @@ function App({ panorama }: { panorama: Panorama }) {
       // Use 'image' event which confirms data is loaded
       viewerRef.current.on('image', async (event) => {
         if (disposed) return;
-        // Set image ID on drawing overlay for stroke persistence
+        // Tell the drawing overlay which place it is on
         if (drawingOverlayRef.current && event?.image?.id) {
           const imageId = String(event.image.id);
           drawingOverlayRef.current.setImageId(imageId);
@@ -283,14 +283,11 @@ function App({ panorama }: { panorama: Panorama }) {
       // keep the undo/redo buttons in step when the history changes on its own (strokes baked
       // into the paint layer can no longer be undone)
       drawingOverlayRef.current.onHistoryChange = refreshUndoRedo;
-      drawingOverlayRef.current.setGuestMode(false); // no accounts: nothing to hold back until sign-in
-      // Start prefetching strokes immediately — don't wait for the viewer to load
-      if (imageId) drawingOverlayRef.current.prefetchStrokes(imageId);
-      drawingOverlayRef.current.onStrokesLoaded = () => {
+      drawingOverlayRef.current.onReady = () => {
         void loadDeepData(imageId).then(() => {
           if (disposed) return;
           drawingOverlayRef.current?.fadeIn();
-          setIsStrokesLoading(false);
+          setIsPreparing(false);
         });
       };
       drawingOverlayRef.current.setViewer(viewerRef.current);
@@ -446,7 +443,7 @@ function App({ panorama }: { panorama: Panorama }) {
     // Block drawing while tutorial is showing
     if (showTutorialRef.current) return;
     // The panorama can already be visible while existing artwork is loading.
-    if (!isLoaded || isStrokesLoading) return;
+    if (!isLoaded || isPreparing) return;
 
     const pos = getPointerPosition(e);
     if (!pos) return;
@@ -472,7 +469,7 @@ function App({ panorama }: { panorama: Panorama }) {
       setIsDrawing(true);
       isDrawingRef.current = true;
     }
-  }, [activeTool, selectedColor, getPointerPosition, isLoaded, isStrokesLoading]);
+  }, [activeTool, selectedColor, getPointerPosition, isLoaded, isPreparing]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     // Block native events from reaching Mapillary during drawing or pinch
@@ -871,7 +868,7 @@ function App({ panorama }: { panorama: Panorama }) {
 
       {/* Show controls immediately; drawing waits until the viewer and artwork are ready. */}
       <div style={{
-        pointerEvents: (!isLoaded || isStrokesLoading || showTutorial) ? 'none' : 'auto',
+        pointerEvents: (!isLoaded || isPreparing || showTutorial) ? 'none' : 'auto',
       }}>
 
         {/* Undo / Redo Buttons (on desktop they sit inside the top of the tool panel, see App.css) */}

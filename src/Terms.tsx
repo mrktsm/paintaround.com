@@ -11,7 +11,6 @@ export default function Terms() {
 
       <Section n={2} heading="How the Service works">
         <p>There are no accounts. Anyone can open a place and draw on it. Everyone viewing the same place sees each other's cursors and drawings as they happen. Drawings stay on a place after you leave, so others who come later can see them, and they appear in that place's preview pictures. They are kept in our server's memory, not saved permanently, and may be cleared at any time, for example when the server restarts.</p>
-        <p>Each device gets a free amount of ink, which refills over time. Ink is a usage limit only: it can't be bought, sold or exchanged, and has no monetary value.</p>
       </Section>
 
       <Section n={3} heading="Acceptable use">
@@ -30,7 +29,7 @@ export default function Terms() {
       </Section>
 
       <Section n={5} heading="Enforcement">
-        <p>New drawings may be checked automatically, and automatic checks can make mistakes. We may remove drawings, limit ink, or block devices that break these Terms or put the Service or its users at risk, at our discretion and without notice.</p>
+        <p>New drawings may be checked automatically, and automatic checks can make mistakes. We may remove drawings, or block devices that break these Terms or put the Service or its users at risk, at our discretion and without notice.</p>
       </Section>
 
       <Section n={6} heading="Photos, maps and other content">

@@ -1,5 +1,5 @@
-import type { DecalLayer } from './deep/decalTools';
-import type { PreviewView } from './pool/localPreview';
+import type { DecalLayer } from '../deep/decalTools';
+import type { PreviewView } from '../pool/localPreview';
 export interface LineSegment {
     x0: number;
     y0: number;

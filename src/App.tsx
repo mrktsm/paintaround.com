@@ -8,7 +8,7 @@ import './App.css';
 import panoramaPreview from './assets/panorama-preview.jpg';
 import touchAndScroll from './assets/touch-and-scroll.svg';
 import mouseRightClick from './assets/mouse-right-click.svg';
-import { DrawingOverlay } from './DrawingOverlay';
+import { DrawingOverlay } from './drawing/DrawingOverlay';
 import { DEFAULT_PANORAMA, PANORAMA_BY_ID, hasCoordinates, type Panorama } from './pool/catalog';
 import { PanoramaDataProvider } from './pool/PanoramaDataProvider';
 import { panoramaLoadingPreviewUrl } from './pool/panoramaImages';

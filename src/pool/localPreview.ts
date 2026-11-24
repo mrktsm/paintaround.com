@@ -4,7 +4,7 @@
  * your browser, from exactly what you just saw, and only you see it: nothing is uploaded.
  * Same framing as the server's and the original previews (shared/panoramaProjection.mjs).
  */
-import type { DrawingOverlay } from '../DrawingOverlay';
+import type { DrawingOverlay } from '../drawing/DrawingOverlay';
 import type { Panorama } from './catalog';
 import { setLocalPreview } from './drawnPreviews';
 import { START_ZOOM } from './startView';

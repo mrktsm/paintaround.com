@@ -34,3 +34,7 @@ research/panorama-pool/processing/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Playwright
+test-results/
+playwright-report/

@@ -17,7 +17,8 @@
     "paint:materials": "node scripts/generate-paint-materials.mjs",
     "server": "node server/realtime.ts",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json",
-    "test": "node --test 'tests/server/*.test.ts'"
+    "test": "node --test 'tests/server/*.test.ts'",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "mapillary-js": "^4.1.2",
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.65.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",

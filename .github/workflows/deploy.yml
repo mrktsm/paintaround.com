@@ -1,5 +1,5 @@
 # CI: lint, type-check, test and build every push and pull request.
-# CD: pushes to master deploy the site and the live-drawing relay to the server
+# CD: pushes to main deploy the site and the live-drawing relay to the server
 #     (same steps as scripts/deploy.sh). Can also be run by hand from the Actions tab.
 #
 # Deploys happen only where these are set (Settings → Secrets and variables → Actions):
@@ -7,7 +7,7 @@
 #   variable DEPLOY_KNOWN_HOSTS   the server's line for known_hosts (pinned, not trusted on first use)
 #   variable SITE_URL             https://…, to check the deploy arrived
 #   secret   DEPLOY_SSH_KEY       private half of a key in the server's ~/.ssh/authorized_keys
-name: CI / Deploy
+name: CI
 
 on:
   push:
@@ -44,7 +44,7 @@ jobs:
 
   deploy:
     needs: build
-    if: vars.DEPLOY_HOST != '' && github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: vars.DEPLOY_HOST != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production
     concurrency:

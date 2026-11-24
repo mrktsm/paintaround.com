@@ -73,6 +73,6 @@ curl -X POST localhost:8787/internal/restore/<id>
 ## Deploying
 
 `scripts/deploy.sh` copies the site to a server where Caddy serves it and passes `/ws` and `/api` to the
-drawing server. `.github/workflows/deploy.yml` does that for pushes to `master`, once the variables
+drawing server. `.github/workflows/deploy.yml` does that for pushes to `main`, once the variables
 listed at its top are set. The drawing server restarts only if its code changed, since that clears the
 drawings.

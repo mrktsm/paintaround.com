@@ -76,3 +76,6 @@ curl -X POST localhost:8787/internal/restore/<id>
 drawing server. `.github/workflows/deploy.yml` does that for pushes to `main`, once the variables
 listed at its top are set. The drawing server restarts only if its code changed, since that clears the
 drawings.
+
+`main` is protected: a commit gets there only once its checks have passed. Push it to a branch first, or
+open a pull request.

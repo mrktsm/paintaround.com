@@ -31,8 +31,10 @@ function useHeight<T extends HTMLElement>() {
   const [h, setH] = useState(0);
   useLayoutEffect(() => {
     if (!el) return;
-    const ro = new ResizeObserver(() => setH(el.offsetHeight));
-    ro.observe(el); // also reports the height right away
+    const measure = () => setH(el.offsetHeight);
+    measure(); // before the first paint: the observer reports a frame later
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
     return () => ro.disconnect();
   }, [el]);
   return [ref, h] as const;
@@ -48,8 +50,8 @@ export default function MobileSheet({
 }: {
   detent: Detent;
   onDetent: (d: Detent) => void;
-  /** visible sheet height in px (for placing map controls / centring the map above it) */
-  onVisibleHeight?: (px: number) => void;
+  /** Visible sheet height in px, in the same frame as the sheet moves (what's above it moves along). */
+  onVisibleHeight?: (px: number, dragging: boolean) => void;
   header: ReactNode;
   children: ReactNode;
   scrollRef?: React.RefObject<HTMLDivElement | null>;
@@ -87,7 +89,8 @@ export default function MobileSheet({
   const heights = detentHeights(vh, safe.top, safe.bottom);
   const visible = dragY ?? heights[detent];
 
-  useEffect(() => { onVisibleHeight?.(visible); }, [visible, onVisibleHeight]);
+  const dragging = dragY != null;
+  useLayoutEffect(() => { onVisibleHeight?.(visible, dragging); }, [visible, dragging, onVisibleHeight]);
 
   // leaving "full" scrolls the content back to the top (like Apple Maps)
   useEffect(() => {
@@ -191,7 +194,7 @@ export default function MobileSheet({
   return (
     <div
       ref={sheet}
-      className={`ex-sheet ex-sheet--${detent} ${dragY != null ? 'is-dragging' : ''}`}
+      className={`ex-sheet ex-sheet--${detent} ${dragging ? 'is-dragging' : ''}`}
       style={{ height: heights.full, transform: `translateY(${heights.full - visible}px)` }}
     >
       {/* header floats over the content (outside the scroller, so it never moves) and the

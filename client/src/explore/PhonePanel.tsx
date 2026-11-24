@@ -19,7 +19,7 @@ interface Props {
   onCity(city: string): void;
   onOpen(place: Place): void;
   onDetent(detent: Detent): void;
-  onVisibleHeight(px: number): void;
+  onVisibleHeight(px: number, dragging: boolean): void;
 }
 
 /** Phones: one bottom sheet with search, the places you visited, and a city's places. */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MAP_LOCATIONS, panoramaViewUrl } from '../pool/catalog';
 import { onDrawnPreviewsChange, refreshDrawnPreviews } from '../pool/drawnPreviews';
@@ -41,6 +41,7 @@ export default function ExplorePage() {
   const navigate = useNavigate();
   const phone = useIsPhone();
   const root = useRef<HTMLDivElement>(null);
+  const mapArea = useRef<HTMLElement>(null);
   const mapEl = useRef<HTMLDivElement>(null);
   const side = useRef<HTMLDivElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
@@ -48,9 +49,17 @@ export default function ExplorePage() {
   const [city, setCity] = useState(firstCity);
   const [panelOpen, setPanelOpen] = useState(true);
   const [detent, setDetent] = useState<Detent>('half');
-  const [sheetHeight, setSheetHeight] = useState(0);
-  const sheet = useRef(0); // known before the map is made
-  const onVisibleHeight = useCallback((px: number) => { sheet.current = px; setSheetHeight(px); }, []);
+  const sheet = useRef({ height: 0, dragging: false });
+  // straight to the page, not through a render: the controls above the sheet move in the same frame
+  const placeControls = useCallback(() => {
+    mapArea.current?.style.setProperty('--sheet-h', `${sheet.current.height}px`);
+    mapArea.current?.classList.toggle('is-dragging', sheet.current.dragging);
+  }, []);
+  const onVisibleHeight = useCallback((height: number, dragging: boolean) => {
+    sheet.current = { height, dragging };
+    placeControls();
+  }, [placeControls]);
+  useLayoutEffect(placeControls, [placeControls, phone]); // the sheet is there before the map is
   const [visited] = useState(() => placesById(readVisited()));
   const search = useSearch();
   useDrawnPreviews();
@@ -88,7 +97,7 @@ export default function ExplorePage() {
     onOpen: open,
     onCity: followCity,
     offset: () => phone
-      ? [0, -Math.min(sheet.current, window.innerHeight * 0.6) / 2]
+      ? [0, -Math.min(sheet.current.height, window.innerHeight * 0.6) / 2]
       : [(side.current?.getBoundingClientRect().right ?? 0) / 2, 0],
   });
 
@@ -105,12 +114,11 @@ export default function ExplorePage() {
     <div
       ref={root}
       className={`ex ${IS_SATELLITE ? 'ex--satellite' : ''} ${DARK_UI ? 'ex--dark' : ''} ${panelOpen ? '' : 'is-panel-closed'} ${phone ? `ex--phone ex--sheet-${detent}` : ''}`}
-      style={phone ? { '--sheet-h': `${sheetHeight}px` } as CSSProperties : undefined}
     >
       {phone
         ? <PhonePanel {...shared} detent={detent} onDetent={setDetent} onVisibleHeight={onVisibleHeight} />
         : <SidePanel {...shared} open={panelOpen} root={root} side={side} body={panelBody} onToggle={setPanelOpen} />}
-      <main className="ex-map">
+      <main ref={mapArea} className="ex-map">
         <div ref={mapEl} className="ex-map__canvas" />
         <MapControls map={map} bearing={bearing} />
       </main>

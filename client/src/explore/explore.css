@@ -789,9 +789,12 @@ html.short-screen .ex { position: absolute; bottom: auto; height: var(--screen-h
 /* map controls ride above the sheet; pinch replaces the +/- buttons */
 .ex--phone .ex-stack { display: none; }
 .ex--phone .ex-ctl--br {
-  bottom: calc(var(--sheet-h, 96px) + 10px);
-  transition: bottom 0.48s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.2s ease;
+  bottom: 10px;
+  transform: translateY(calc(-1 * var(--sheet-h, 96px)));
+  transition: transform 0.48s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.2s ease; /* as the sheet */
+  will-change: transform;
 }
+.ex--phone .is-dragging .ex-ctl--br { transition: opacity 0.2s ease; }
 .ex--phone.ex--sheet-full .ex-ctl--br { opacity: 0; pointer-events: none; }
 .ex--phone .ex-ctl--tr { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; }
 .ex--phone .ex-maptiler-logo { left: 12px; bottom: calc(var(--sheet-h, 96px) + 10px); }

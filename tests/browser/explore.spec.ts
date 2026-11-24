@@ -119,3 +119,51 @@ test('on a phone: the sheet, search and the city list', async ({ browser }) => {
   await expect(p.locator('.ex-city__btn')).toContainText('Paris');
   await expect.poll(async () => Math.abs((await middle(p)).lat - 48.86), { timeout: 8000 }).toBeLessThan(0.3);
 });
+
+test('on a phone: coming back from a place, nothing is under the search bar, not even for a frame', async ({ browser }) => {
+  const p = await (await browser.newContext(PHONE)).newPage();
+  pages.push(p);
+  await p.addInitScript(() => {
+    localStorage.setItem('tutorialSeen', '1');
+    const w = window as unknown as { __overlap: number[] };
+    w.__overlap = [];
+    (function frame() {
+      const head = document.querySelector('.ex-sheet__head'), body = document.querySelector('.ex-sheet__body');
+      if (head && body) w.__overlap.push(Math.round(head.getBoundingClientRect().bottom - body.getBoundingClientRect().top));
+      requestAnimationFrame(frame);
+    })();
+  });
+  await p.goto('/view?imageId=ph-colosseum');
+  await expect(p.locator('.viewer-container.loaded')).toBeVisible({ timeout: 20_000 });
+  await p.locator('.view-close').tap();
+  await expect(p.locator('.ex-recent')).toHaveCount(1);
+  await p.waitForTimeout(800);
+  const overlap = await p.evaluate(() => (window as unknown as { __overlap: number[] }).__overlap);
+  expect(overlap.length).toBeGreaterThan(5);
+  expect(Math.max(...overlap)).toBeLessThanOrEqual(0);
+});
+
+test('on a phone: the credits move with the sheet, not after it', async ({ browser }) => {
+  const p = await explore(browser, '/', PHONE);
+  await p.evaluate(() => {
+    const w = window as unknown as { __gap: { gap: number; y: number }[] };
+    w.__gap = [];
+    (function frame() {
+      const sheet = document.querySelector('.ex-sheet')!.getBoundingClientRect(), line = document.querySelector('.ex-credit')!.getBoundingClientRect();
+      w.__gap.push({ gap: sheet.top - line.bottom, y: sheet.top });
+      requestAnimationFrame(frame);
+    })();
+  });
+  const touch = await p.context().newCDPSession(p);
+  const at = (type: string, y?: number) => touch.send('Input.dispatchTouchEvent', { type, touchPoints: y === undefined ? [] : [{ x: 200, y }] } as never);
+  const top = (await p.locator('.ex-sheet').boundingBox())!.y;
+  await at('touchStart', top + 12);
+  for (let k = 1; k <= 25; k++) { await at('touchMove', top + 12 + k * 7); await p.waitForTimeout(16); }
+  for (let k = 25; k >= 5; k--) { await at('touchMove', top + 12 + k * 7); await p.waitForTimeout(16); }
+  await at('touchEnd');
+  await p.waitForTimeout(900);
+  const seen = await p.evaluate(() => (window as unknown as { __gap: { gap: number; y: number }[] }).__gap);
+  const ys = seen.map(s => s.y), gaps = seen.map(s => s.gap);
+  expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(100); // it did move
+  expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(3);
+});

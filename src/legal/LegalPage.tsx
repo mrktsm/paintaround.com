@@ -20,14 +20,14 @@ export default function LegalPage({ title, updated, children }: { title: string;
   return (
     <div className="legal">
       <article className="legal-page">
+        {/* installed as an app there is no browser back button */}
+        <a className="legal-back" href="/" onClick={e => { if (document.referrer.startsWith(location.origin)) { e.preventDefault(); history.back(); } }}>
+          <svg width="10" height="17" viewBox="0 0 10 17" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8.5 1.5 1.5 8.5l7 7" /></svg>
+          Back
+        </a>
         <h1>{title}</h1>
         <p className="legal-date">{updated}</p>
         {children}
-        <footer className="legal-foot">
-          <a href="/">paintaround</a>
-          <a href="/privacy">Privacy Policy</a>
-          <a href="/terms">Terms of Service</a>
-        </footer>
       </article>
     </div>
   );

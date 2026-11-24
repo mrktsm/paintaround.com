@@ -13,14 +13,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 export type Detent = 'collapsed' | 'half' | 'full';
 
 const COLLAPSED = 96; // grabber + search field
-const FULL_GAP = 52; // map left visible above a full sheet
+/** map left visible above a full sheet: never under the status bar / Dynamic Island */
+const fullGap = (safeTop: number) => Math.max(52, safeTop + 10);
 const PROJECT_MS = 220; // how far a flick "throws" the sheet (velocity * this)
 
-function detentHeights(vh: number, safeBottom: number) {
+function detentHeights(vh: number, safeTop: number, safeBottom: number) {
   return {
     collapsed: COLLAPSED + safeBottom,
     half: Math.round(vh * 0.46),
-    full: vh - FULL_GAP,
+    full: vh - fullGap(safeTop),
   };
 }
 
@@ -71,24 +72,31 @@ export default function MobileSheet({
   const ownScroll = useRef<HTMLDivElement>(null);
   const content = scrollRef ?? ownScroll;
   const [vh, setVh] = useState(() => window.innerHeight);
-  const [safeBottom, setSafeBottom] = useState(0);
+  const [safe, setSafe] = useState({ top: 0, bottom: 0 });
   const [dragY, setDragY] = useState<number | null>(null); // live visible height while dragging
   const [scrolled, setScrolled] = useState(false); // content under the header -> header gets glass + hairline
   const [headRef, headH] = useHeight<HTMLDivElement>();
 
   useLayoutEffect(() => {
-    // env(safe-area-inset-bottom) isn't readable from JS directly: measure it once
+    // safe areas aren't readable from JS directly: measure them (again when the screen turns or
+    // Safari's bars come and go)
     const probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px);visibility:hidden';
+    probe.style.cssText = 'position:fixed;top:0;left:0;width:0;box-sizing:content-box;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none';
     document.body.appendChild(probe);
-    setSafeBottom(probe.getBoundingClientRect().height);
-    probe.remove();
-    const onResize = () => setVh(window.innerHeight);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const measure = () => {
+      setVh(window.innerHeight);
+      const s = getComputedStyle(probe);
+      const top = parseFloat(s.paddingTop) || 0, bottom = parseFloat(s.paddingBottom) || 0;
+      setSafe(prev => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(probe);
+    window.addEventListener('resize', measure);
+    return () => { window.removeEventListener('resize', measure); ro.disconnect(); probe.remove(); };
   }, []);
 
-  const heights = detentHeights(vh, safeBottom);
+  const heights = detentHeights(vh, safe.top, safe.bottom);
   const visible = dragY ?? heights[detent];
 
   useEffect(() => { onVisibleHeight?.(visible); }, [visible, onVisibleHeight]);

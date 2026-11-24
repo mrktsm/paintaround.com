@@ -1,7 +1,7 @@
 /* New map interface — light mode, Apple-Maps-like layout */
 .ex {
   /* proportions measured from the reference: rail ~15%, panel ~29% of the window */
-  --ex-rail-w: 72px; /* collapsed, icon-only rail */
+  --ex-rail-w: calc(72px + env(safe-area-inset-left, 0px)); /* collapsed, icon-only rail (clear of the notch in landscape) */
   --ex-panel-w: clamp(360px, 29vw, 500px);
   /* frosted glass over the map (same idea as the street-view sidebar) */
   /* rail + panel share one material so they read as a single sidebar */
@@ -57,7 +57,8 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 12px 0; /* first icon centred on the panel's 66px title row */
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 0 12px env(safe-area-inset-left, 0px); /* first icon centred on the panel's 66px title row */
+  box-sizing: border-box;
   background: var(--ex-bg-rail);
   backdrop-filter: var(--ex-glass);
   -webkit-backdrop-filter: var(--ex-glass);
@@ -143,7 +144,7 @@
 }
 .ex-panel.is-closed { margin-left: calc(-1 * var(--ex-panel-w) - 1px); }
 .ex-panel__head {
-  padding: 0 0 14px;
+  padding: env(safe-area-inset-top, 0px) 0 14px;
 }
 .ex-panel__titlerow {
   height: 66px;
@@ -195,7 +196,7 @@
   overscroll-behavior-y: auto; /* keep the native bounce at the top/bottom */
 }
 .ex-panel__body {
-  padding: 2px 18px 24px 18px;
+  padding: 2px 18px calc(24px + env(safe-area-inset-bottom, 0px)) 18px;
 }
 /* compact header bar that fades in once the big title has scrolled away */
 .ex-panel__bar {
@@ -203,11 +204,12 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 66px;
+  height: calc(66px + env(safe-area-inset-top, 0px));
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 14px 3px 18px;
+  padding: env(safe-area-inset-top, 0px) 14px 3px 18px;
   box-sizing: border-box;
   background: var(--ex-header-bg);
   backdrop-filter: var(--ex-header-glass);
@@ -343,10 +345,10 @@
   gap: 12px;
   z-index: 2;
 }
-.ex-ctl--tr { top: 18px; right: 18px; }
+.ex-ctl--tr { top: calc(18px + env(safe-area-inset-top, 0px)); right: calc(18px + env(safe-area-inset-right, 0px)); }
 .ex-ctl--br {
-  bottom: 14px;
-  right: 14px;
+  bottom: max(14px, env(safe-area-inset-bottom, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
   flex-direction: row;
   align-items: flex-end;
   gap: 8px;
@@ -807,7 +809,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  top: 52px; /* same height as the main sheet when full (FULL_GAP in MobileSheet.tsx) */
+  top: max(52px, env(safe-area-inset-top, 0px) + 10px); /* same height as the main sheet when full (fullGap in MobileSheet.tsx) */
   display: flex;
   flex-direction: column;
   border-radius: 14px 14px 0 0;

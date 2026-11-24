@@ -4,10 +4,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="paintaround" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#09090b" />
   <link rel="icon" type="image/png" href="/favicon.png?v=abstract-circle-1" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="manifest" href="/manifest.json" />
   <title>paintaround.com</title>
   <meta property="og:title" content="Draw on the world" />
@@ -16,6 +19,12 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Draw on the world" />
   <meta name="twitter:description" content="Leave your mark on Street View. Draw, discover, and explore what others have left behind." />
+  <!-- before the app's CSS loads: no white flash -->
+  <style>html, body { background: #09090b; }</style>
+  <script>
+    // opened from the home screen (iPhones report it as navigator.standalone)
+    if (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches) document.documentElement.classList.add('standalone');
+  </script>
   <script>
     // Fix iOS Safari viewport height — uses visualViewport API with debounced fallback
     (function () {
@@ -43,7 +52,7 @@
   </script>
 </head>
 
-<body style="background:#ffffff">
+<body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>

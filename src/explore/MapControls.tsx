@@ -1,12 +1,10 @@
 import { useState, type ReactNode, type RefObject } from 'react';
 import type { Map } from 'maplibre-gl';
 import Compass from '../components/Compass';
+import { SOURCE_CODE } from '../sourceCode';
 import { DARK_UI } from '../theme';
 import { ESRI_DATA_CREDIT } from './esriPreviewStyle';
 import { MAP_SOURCE, type MapSource } from './mapStyles';
-
-/** The AGPL asks for this to be offered to everyone using the site. If you run a changed version, link to yours. */
-const SOURCE_CODE = 'https://github.com/mrktsm/paintaround.com';
 
 const CREDITS: Record<MapSource, ReactNode> = {
   esri: ESRI_DATA_CREDIT,

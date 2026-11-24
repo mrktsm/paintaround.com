@@ -1,8 +1,9 @@
 import LegalPage, { Section } from './legal/LegalPage';
+import { SOURCE_CODE } from './sourceCode';
 
 export default function Terms() {
   return (
-    <LegalPage title="Terms of Service" updated="November 23, 2026">
+    <LegalPage title="Terms of Service" updated="November 24, 2026">
       <p>These Terms of Service (the "Terms") govern your use of paintaround.com (the "Service"), where you explore 360° photos of real places and draw on them live, together with whoever else is looking at the same place.</p>
 
       <Section n={1} heading="Agreement">
@@ -32,8 +33,9 @@ export default function Terms() {
         <p>New drawings may be checked automatically, and automatic checks can make mistakes. We may remove drawings, or block devices that break these Terms or put the Service or its users at risk, at our discretion and without notice.</p>
       </Section>
 
-      <Section n={6} heading="Photos, maps and other content">
+      <Section n={6} heading="Photos, maps, code and other content">
         <p>The 360° photos, map imagery and other content belong to their owners and are credited in the app with their licenses. Some photos are licensed under Creative Commons Attribution-ShareAlike (CC BY-SA): a drawing made on such a photo is an adaptation of it and is shared under the same license. The satellite map is provided by Esri and its partners. The pencil's paper texture is by David Revoy and is in the public domain (CC0).</p>
+        <p>The code of the Service is open source, under the GNU AGPL 3.0: you can find it <a href={SOURCE_CODE} target="_blank" rel="noreferrer">on GitHub</a>.</p>
       </Section>
 
       <Section n={7} heading="Availability">

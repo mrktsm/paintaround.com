@@ -61,12 +61,12 @@ export const RULES = `You review drawings people made on top of 360° street pho
 Image 1: only the new paint, on a plain background. Image 2: the same area with the photo faded to grey behind it (only paint is in colour).
 
 Remove ONLY if the drawing clearly shows one of these:
-- sexual content: genitals, sexual acts, explicit nudity
-- hate: hate symbols (e.g. swastika, SS runes, KKK imagery), slurs, or text attacking people for race, religion, ethnicity, gender, sexuality or disability
+- sexual content: drawn genitals, sexual acts or explicit nudity; or written sexual words (names or slang for genitals, breasts, sexual fluids or sex acts, such as "vagina" or "blowjob") when that is clearly the meaning
+- hate: hate symbols (a swastika: exactly four straight arms of equal length, each bent once at a sharp right angle, all in the same direction; SS runes; KKK imagery), slurs, or text attacking people for race, religion, ethnicity, gender, sexuality or disability
 - threats: threats of violence against people or places, glorifying a real attack
 - personal info: phone numbers, home addresses, full names paired with insults, or other doxxing
 
-Always allow (these are NOT violations): hearts, faces, smileys, stick figures, animals, names or initials, "X was here", dates, abstract scribbles, red paint (it is not blood), swirls and geometric shapes (a swirl or a cross is not a swastika unless it clearly is one), mild rude jokes or swearing not aimed at a group, cartoon violence, art of any style, clumsy shapes that might accidentally resemble something.
+Always allow (these are NOT violations): hearts, faces, smileys, stick figures, animals, names or initials, "X was here", dates, abstract scribbles, red paint (it is not blood), swirls and geometric shapes, wheels and blades (curved, slanted or tapering arms, or any number of arms other than four, is not a swastika), everyday objects, plants, food or fruit that are merely round or long, ordinary swearing that isn't sexual (such as "damn", or "fuck" as a plain swear word), words or names that only contain or match a rude word (such as "Hancock" or "Moby Dick"), mild rude jokes not aimed at a group, cartoon violence, art of any style, clumsy shapes that might accidentally resemble something.
 
 If you are not sure, the answer is allow. Wrongly removing a harmless drawing is worse than missing a borderline one.
 Only use confidence "high" when the violation is unmistakable to any reasonable viewer.`;
@@ -236,9 +236,12 @@ export async function moderate(placeId: string, batch: FinishedStroke[], own: Fi
   if (inFlight >= MAX_WAITING) { problem('too many drawings waiting to be checked'); return { action: 'allow' }; }
   if (!underCap()) { problem('hourly limit of checks reached'); return { action: 'allow' }; }
   inFlight++;
+  const started = Date.now();
   try {
     const pair = await rendering(() => renderPair(placeId, batch, own));
     const v = await judging(() => judge(pair));
+    // every check leaves a trace, without the drawing or what it says
+    console.log(`[moderation] ${placeId}: checked ${batch.length} stroke(s) in ${((Date.now() - started) / 1000).toFixed(1)} s: ${v ? `${v.decision}${v.decision === 'remove' ? ` ${v.category}/${v.confidence}` : ''}` : 'no answer'}`);
     if (!v || v.decision !== 'remove' || v.confidence === 'low') return { action: 'allow' };
     return { action: v.confidence === 'high' ? 'remove' : 'hold', verdict: v, pictures: pair };
   } catch (e) {

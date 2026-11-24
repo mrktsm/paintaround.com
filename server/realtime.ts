@@ -5,8 +5,7 @@
  * within a total memory budget. Also serves previews with the drawings on them (server/previews).
  *
  * Run:  node server/realtime.ts           (Node 23.6+, types stripped natively)
- * Env:  PORT (8787), HOST (127.0.0.1), ALLOWED_ORIGINS (comma list; default: the site + localhost),
- *       PANO_DIR (panorama images for previews; default ../public/panorama-pool/)
+ * Settings: .env.example
  */
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -20,8 +19,7 @@ import { LIMITS, PEER_COLORS, type ClientMessage, type FinishedStroke, type Peer
 const PORT = Number(process.env.PORT ?? 8787);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const ALLOWED_ORIGINS = new Set(
-  (process.env.ALLOWED_ORIGINS ??
-    'https://paintaround.com,https://www.paintaround.com,https://draw.markotsymbaluk.com,https://washere.live,https://www.washere.live,http://server.example,http://localhost:5173,http://127.0.0.1:5173')
+  (process.env.ALLOWED_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173')
     .split(',').map(s => s.trim()).filter(Boolean),
 );
 

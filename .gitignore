@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 .vercel
 gift-codes.txt
+.env
 
 # Deep Brush prototype layers (large binaries, regenerate with research/deep-brush)
 public/deep-layers/

@@ -1,9 +1,12 @@
 # CI: lint, type-check, test and build every push and pull request.
-# CD: pushes to master deploy the site and the live-drawing relay to the Oracle server
+# CD: pushes to master deploy the site and the live-drawing relay to the server
 #     (same steps as scripts/deploy.sh). Can also be run by hand from the Actions tab.
 #
-# Repo secret needed for deploys: DEPLOY_SSH_KEY — private half of a key that is in the
-# server's ~/.ssh/authorized_keys (ubuntu@server.example).
+# Deploys happen only where these are set (Settings → Secrets and variables → Actions):
+#   variable DEPLOY_HOST          user@address
+#   variable DEPLOY_KNOWN_HOSTS   the server's line for known_hosts (pinned, not trusted on first use)
+#   variable SITE_URL             https://…, to check the deploy arrived
+#   secret   DEPLOY_SSH_KEY       private half of a key in the server's ~/.ssh/authorized_keys
 name: CI / Deploy
 
 on:
@@ -41,14 +44,16 @@ jobs:
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: vars.DEPLOY_HOST != '' && github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production
     concurrency:
       group: deploy-production
       cancel-in-progress: false
     env:
-      HOST: ubuntu@server.example
+      HOST: ${{ vars.DEPLOY_HOST }}
+      KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+      SITE_URL: ${{ vars.SITE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -59,10 +64,9 @@ jobs:
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
-          # the server's real host key (pinned, not trusted on first use)
-          echo 'server.example ssh-ed25519 HOST_KEY' >> ~/.ssh/known_hosts
+          printf '%s\n' "$KNOWN_HOSTS" >> ~/.ssh/known_hosts
       - name: Deploy site
-        run: SKIP_BUILD=1 DEPLOY_KEY=~/.ssh/deploy bash scripts/deploy.sh
+        run: SKIP_BUILD=1 DEPLOY_HOST="$HOST" DEPLOY_KEY=~/.ssh/deploy bash scripts/deploy.sh
       - name: Update live-drawing relay (restart only if it changed)
         run: |
           # -c: compare contents (a fresh checkout gives every file a new timestamp); -R keeps the
@@ -81,10 +85,10 @@ jobs:
       - name: Check the live site serves this build
         run: |
           want=$(grep -o 'assets/index-[^"]*\.js' dist/index.html | head -1)
-          got=$(curl -fsS https://paintaround.com/ | grep -o 'assets/index-[^"]*\.js' | head -1)
+          got=$(curl -fsS "$SITE_URL/" | grep -o 'assets/index-[^"]*\.js' | head -1)
           echo "built $want, live $got"
           [ "$want" = "$got" ]
           # the panorama photos aren't in git: make sure the deploy brought them along
-          type=$(curl -fsS -o /dev/null -w '%{content_type}' https://paintaround.com/panorama-pool/ph-colosseum-card.jpg)
+          type=$(curl -fsS -o /dev/null -w '%{content_type}' "$SITE_URL/panorama-pool/ph-colosseum-card.jpg")
           echo "photo check: $type"
           [ "$type" = "image/jpeg" ]

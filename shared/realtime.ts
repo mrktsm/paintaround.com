@@ -1,5 +1,5 @@
 /**
- * Live drawing protocol, shared by the browser (src/realtime) and the server (server/realtime.ts).
+ * Live drawing protocol, shared by the browser (client/src/realtime) and the server (server/realtime.ts).
  * JSON over one WebSocket at /ws. One room per panorama; positions are panorama "basic" coords
  * (u, v in [0, 1]) so every viewer projects them to their own camera.
  * Nothing touches disk: a room's drawings live in server memory while the server runs. Fresh

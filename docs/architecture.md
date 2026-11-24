@@ -1,29 +1,29 @@
 # How it works
 
 ```
-src/explore   the map page: every place, search, the panel
-src/view      a place: the camera, the pointer, the toolbar
-src/drawing   everything drawn over the photo
-src/deep      3D: surfaces, unwrapping them, the brushes, lighting
-src/pool      the catalog of places and their photos
-src/realtime  the connection to the drawing server
-server        the drawing server: rooms, previews, moderation, alerts
-shared        what both sides use: messages, panorama projection
-tests         server and unit tests (npm test), browser tests (npm run test:browser)
-research      how the photos were chosen and the 3D data made
+client/src/explore   the map page: every place, search, the panel
+client/src/view      a place: the camera, the pointer, the toolbar
+client/src/drawing   everything drawn over the photo
+client/src/deep      3D: surfaces, unwrapping them, the brushes, lighting
+client/src/pool      the catalog of places and their photos
+client/src/realtime  the connection to the drawing server
+server               the drawing server: rooms, previews, moderation, alerts
+shared               what both use: messages, panorama projection, the starting camera
+pipeline             adding places: photos and 3D data
+tests                server and unit tests (npm test), browser tests (npm run test:browser)
 ```
 
 ## Places
 
-`src/data/panorama-pool.json` lists the places. Photos are equirectangular (360° × 180°), 4096 × 2048.
+`client/src/data/panorama-pool.json` lists the places. Photos are equirectangular (360° × 180°), 4096 × 2048.
 A point on one is `(u, v)`, both from 0 to 1; the code calls these *basic* coordinates, like Mapillary.
 [mapillary-js](https://github.com/mapillary/mapillary-js) shows the photo. The few of its internals that
 are needed (to turn the camera freely and follow it every frame) are all behind
-`src/viewer/mapillaryInternals.ts`.
+`client/src/viewer/mapillaryInternals.ts`.
 
 ## A stroke
 
-`DrawingOverlay` ties the parts in `src/drawing` together. What's on screen right now (the camera, the
+`DrawingOverlay` ties the parts in `client/src/drawing` together. What's on screen right now (the camera, the
 depth, the size) is the `Scene` the parts read.
 
 **On a surface** (`SurfacePen`). Where the pointer is, the depth map gives a 3D point and a direction.

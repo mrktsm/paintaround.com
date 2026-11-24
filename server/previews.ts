@@ -9,8 +9,8 @@ import { loadingViewFor, projectRaw, thumbnailViewFor, type View } from '../shar
 import type { FinishedStroke } from '../shared/realtime.ts';
 import { strokeOverlays, type PaintLayer } from './layer.ts';
 
-/** Panorama images: the site's copy on the server, or public/ when running locally. */
-const PANO_DIR = process.env.PANO_DIR ?? new URL('../public/panorama-pool/', import.meta.url).pathname;
+/** Panorama images: the site's copy on the server, or client/public/ when running locally. */
+const PANO_DIR = process.env.PANO_DIR ?? new URL('../client/public/panorama-pool/', import.meta.url).pathname;
 const SAFE_ID = /^[\w.-]{1,128}$/;
 const DEBOUNCE_MS = 6000;
 

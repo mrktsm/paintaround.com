@@ -4,14 +4,14 @@ import sharp from 'sharp';
 
 /** A place whose 3D data must be there, so strokes are drawn onto surfaces like in production. */
 export const PLACE = process.env.PLACE ?? 'ph-colosseum';
-const PUBLIC = new URL('../../public/', import.meta.url).pathname;
+const PUBLIC = new URL('../../client/public/', import.meta.url).pathname;
 const ready = existsSync(`${PUBLIC}panorama-pool/${PLACE}.jpg`) && existsSync(`${PUBLIC}deep-layers/${PLACE}/distance.f32`);
 
 const open: Page[] = [];
 
 /** Call at the top of a file: skips it when the photo or 3D data isn't there, closes everyone's windows after a test. */
 export function needsPlace(): void {
-  test.skip(!ready, `needs public/panorama-pool/${PLACE}.jpg and public/deep-layers/${PLACE}/`);
+  test.skip(!ready, `needs client/public/panorama-pool/${PLACE}.jpg and client/public/deep-layers/${PLACE}/`);
   test.afterEach(async () => { await Promise.all(open.splice(0).map(p => p.context().close())); });
 }
 

@@ -26,11 +26,11 @@ dist-ssr
 gift-codes.txt
 .env
 
-# Deep Brush prototype layers (large binaries, regenerate with research/deep-brush)
-public/deep-layers/
-public/panorama-pool/
-research/panorama-pool/cache/
-research/panorama-pool/processing/
+# Photos and 3D data (npm run photos; pipeline/)
+client/public/panorama-pool
+client/public/deep-layers
+pipeline/photos/cache/
+pipeline/photos/review/
 
 # Python bytecode
 __pycache__/

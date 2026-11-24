@@ -5,9 +5,11 @@ const RELAY_PORT = process.env.RELAY_PORT ?? 8787
 
 // https://vite.dev/config/
 export default defineConfig({
+  root: 'client',
   plugins: [react()],
-  base: '/',
+  build: { outDir: '../dist', emptyOutDir: true },
   server: {
+    fs: { allow: ['..'] }, // shared/
     // live drawing server (npm run server); production gets the same path via Caddy
     proxy: { '/ws': { target: `ws://127.0.0.1:${RELAY_PORT}`, ws: true }, '/api': { target: `http://127.0.0.1:${RELAY_PORT}` } },
   },

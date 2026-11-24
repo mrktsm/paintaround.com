@@ -26,7 +26,7 @@ npm run server       # the drawing server, in one terminal
 npm run dev          # the site, in another: http://localhost:5173
 ```
 
-Strokes are flat until a place has 3D data: see [docs/3d-data.md](docs/3d-data.md).
+Strokes are flat until a place has 3D data: see [pipeline/3d](pipeline/3d/README.md).
 The server's settings (moderation, alerts) are in [.env.example](.env.example);
 `node --env-file=.env server/realtime.ts` uses them.
 
@@ -39,7 +39,16 @@ npm test              # the drawing server, moderation and the map's clustering
 npm run test:browser  # the real app in Chrome; needs photos (and 3D data for most)
 ```
 
-[docs/architecture.md](docs/architecture.md) explains how it works and where things are.
+```
+client/     the website
+server/     the live drawing server
+shared/     what both use
+pipeline/   adding places: choosing photos, making 3D data
+scripts/    getting the photos, deploying
+tests/
+```
+
+[docs/architecture.md](docs/architecture.md) explains how it works.
 
 ## License
 
@@ -47,5 +56,5 @@ The code is under the [GNU AGPL 3.0](LICENSE): if you run a changed version for 
 changes. These are not covered by it:
 
 - The photos, which come from [Poly Haven](https://polyhaven.com) (CC0) and Wikimedia Commons. Each
-  one's author and license are in `src/data/panorama-pool.json`.
-- The textures in `public/textures`, by David Revoy (CC0).
+  one's author and license are in `client/src/data/panorama-pool.json`.
+- The textures in `client/public/textures`, by David Revoy (CC0).

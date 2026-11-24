@@ -69,9 +69,8 @@ jobs:
         run: SKIP_BUILD=1 DEPLOY_HOST="$HOST" DEPLOY_KEY=~/.ssh/deploy bash scripts/deploy.sh
       - name: Update live-drawing relay (restart only if it changed)
         run: |
-          # -c: compare contents (a fresh checkout gives every file a new timestamp); -R keeps the
-          # paths (the shared preview code imports src/pool/startView.ts)
-          changed=$(rsync -aicR -e "ssh -i ~/.ssh/deploy" server shared src/pool/startView.ts "$HOST:/home/ubuntu/streetview-realtime/" | grep -v '^\.' || true)
+          # -c: compare contents (a fresh checkout gives every file a new timestamp)
+          changed=$(rsync -aic -e "ssh -i ~/.ssh/deploy" server shared "$HOST:/home/ubuntu/streetview-realtime/" | grep -v '^\.' || true)
           if [ -n "$changed" ]; then
             echo "$changed"
             # dependencies changed: install them (sharp for previews, ws)

@@ -1,10 +1,10 @@
 /**
- * Panorama -> normal camera view projection, shared by the preview scripts (scripts/) and the
+ * Panorama -> normal camera view projection, shared by the photo scripts (pipeline/photos) and the
  * live-drawing server (server/previews.ts, which re-renders previews with drawings on them), so
  * both produce exactly the same framing: card view, field of view and the viewer's start zoom.
  */
 import sharp from 'sharp';
-import { START_ZOOM } from '../src/pool/startView.ts';
+import { START_ZOOM } from './startView.ts';
 
 // Normal camera views, expressed in the original panorama's basic coordinates.
 // Pixels in the full panorama are never changed; these are separate card images.

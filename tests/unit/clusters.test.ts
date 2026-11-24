@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Clusters, type Spot } from '../../src/explore/clusters.ts';
+import { Clusters, type Spot } from '../../client/src/explore/clusters.ts';
 
 // a few cities' worth of places, some of them across the antimeridian
 let seed = 7;

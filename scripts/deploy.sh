@@ -10,13 +10,13 @@ DEST="/var/www/streetview"
 
 cd "$(dirname "$0")/.."
 [ "${SKIP_BUILD:-}" = "1" ] || npm run build
-# dist/ already contains public/ (incl. deep-layers/ if present locally)
+# dist/ already contains client/public/ (incl. deep-layers/ if present locally)
 rsync -az --delete --exclude panorama-pool -e "ssh -i $KEY" dist/ "$HOST:$DEST.new/"
 # Batch-built depth + lighting layers (too big for the laptop) live on the server itself:
 # copy them into the new site before the swap (depth file + paint material per panorama).
 LAYERS="${DEPLOY_LAYERS:-/home/ubuntu/streetview-processing/batch-20261120/layers}"
 ssh -i "$KEY" "$HOST" "set -e; [ -d $LAYERS ] && rsync -a --exclude meta.json $LAYERS/ $DEST.new/deep-layers/ && echo \"layers: \$(ls $LAYERS | wc -l) panoramas\" || echo 'no batch layers on server'"
-# The panorama photos (public/panorama-pool, ~500 MB) aren't in git, so builds made elsewhere
+# The panorama photos (client/public/panorama-pool, ~500 MB) aren't in git, so builds made elsewhere
 # (CI) don't have them: the server keeps its own copy and every deploy gets it. A local build
 # that has them refreshes that copy first.
 POOL="${DEPLOY_PHOTOS:-/home/ubuntu/streetview-assets/panorama-pool}"

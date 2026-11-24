@@ -1,6 +1,6 @@
 /**
  * Browser tests: the real app and drawing server in Chrome. They need a place's photo and its 3D
- * data in public/ (neither is in git), so they run locally, not in CI: npm run test:browser
+ * data in client/public/ (neither is in git), so they run locally, not in CI: npm run test:browser
  */
 import { defineConfig } from '@playwright/test';
 

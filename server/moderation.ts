@@ -8,9 +8,9 @@
  *     area with the photo faded to grey behind it, so only paint is in colour (the photo tells a drawn
  *     word from a real sign). The second one includes the same person's own earlier strokes (someone
  *     could draw half, wait, then the rest) but never other people's paint: with it, harmless drawings
- *     next to someone else's bad one got flagged (research/moderation-eval/neighbours.mjs).
- *  3. One judge: Gemini 3.1 Flash-Lite (best of the models tested on drawings made in the real app,
- *     see research/moderation-eval). Told to flag only clear violations; unsure = allow.
+ *     next to someone else's bad one got flagged.
+ *  3. One judge: Gemini 3.1 Flash-Lite (best of the models tested on drawings made in the real app).
+ *     Told to flag only clear violations; unsure = allow.
  *  4. MODERATION=log (the default) only records what it would do. MODERATION=on acts: remove at high
  *     confidence; "hold" at medium (stays up in the place, kept off the map previews).
  *  5. Removal is soft: hidden from everyone else (the author still sees it), kept in memory with
@@ -28,7 +28,7 @@ import { alertProblem } from './alerts.ts';
 import { PAINT_LAYER, type FinishedStroke } from '../shared/realtime.ts';
 import { strokeBitmap, strokeOverlays, strokeRect } from './layer.ts';
 
-const PANO_DIR = process.env.PANO_DIR ?? new URL('../public/panorama-pool/', import.meta.url).pathname;
+const PANO_DIR = process.env.PANO_DIR ?? new URL('../client/public/panorama-pool/', import.meta.url).pathname;
 const API_KEY = process.env.GEMINI_API_KEY ?? '';
 const MODEL = 'gemini-3.1-flash-lite';
 const API_URL = process.env.GEMINI_URL ?? 'https://generativelanguage.googleapis.com';

@@ -32,8 +32,6 @@ jobs:
         run: npm run lint
       - name: Type-check app and relay
         run: npm run typecheck
-      - name: Test the relay and moderation
-        run: npm test
       - name: Build
         run: npm run build
       - uses: actions/upload-artifact@v4
@@ -42,8 +40,20 @@ jobs:
           path: dist
           retention-days: 3
 
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Test the relay, moderation and the map's clustering
+        run: npm test
+
   deploy:
-    needs: build
+    needs: [build, tests]
     if: vars.DEPLOY_HOST != '' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production

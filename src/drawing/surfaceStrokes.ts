@@ -1,6 +1,7 @@
 import { DecalLayer, makeDecalTool, type DecalTool, type ToolType } from "../deep/decalTools";
 import { GeodesicMap, pieceGrid, type BakedPiece } from "../deep/geodesicMap";
 import { SurfaceDecal, type DeepData } from "../deep/surfaceDecal";
+import type { Scene } from "./scene";
 import type { MarkerTexture } from "./strokes";
 import type { WebGLDrawingRenderer } from "./WebGLDrawingRenderer";
 
@@ -216,4 +217,15 @@ export function drawLivePieces(r: WebGLDrawingRenderer, live: DecalState[]): voi
     g.dirty = null;
     st.layer.dirty = null;
   }
+}
+
+/** Can strokes be painted onto the 3D surface here? */
+export function canPaintSurfaces(scene: Scene): scene is Scene & { deep: DeepData; renderer: WebGLDrawingRenderer } {
+  return !!(scene.deep && scene.renderer?.hasGPUProjection() && scene.renderer.hasDeepStrokes());
+}
+
+/** Free a piece's surface map. */
+export function releasePiece(scene: Scene, st: DecalState): void {
+  scene.renderer?.releaseDeepStroke(st.geo);
+  st.geo.release();
 }

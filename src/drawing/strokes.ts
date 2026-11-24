@@ -1,4 +1,5 @@
 import type { ToolType } from "../deep/decalTools";
+import type { Scene } from "./scene";
 
 /** A finished stroke: its bitmap and where it sits on the panorama. */
 export interface MarkerTexture {
@@ -53,4 +54,57 @@ export function copyCanvas(src: HTMLCanvasElement): HTMLCanvasElement {
   c.height = src.height;
   c.getContext("2d")!.drawImage(src, 0, 0);
   return c;
+}
+
+/** Every finished stroke in this place, oldest first (that's the order they're drawn in). */
+export class Strokes {
+  list: MarkerTexture[] = [];
+  /** Called when a rainbow stroke is added (they keep moving). */
+  onRainbow: (() => void) | null = null;
+  private readonly scene: Scene;
+
+  constructor(scene: Scene) {
+    this.scene = scene;
+  }
+
+  add(tex: MarkerTexture): void {
+    this.list.push(tex);
+    if (tex.isRainbow) this.onRainbow?.();
+  }
+
+  has(tex: MarkerTexture): boolean {
+    return this.list.includes(tex);
+  }
+
+  remove(tex: MarkerTexture): void {
+    const i = this.list.indexOf(tex);
+    if (i > -1) this.list.splice(i, 1);
+    this.forget(tex);
+  }
+
+  /** Put a stroke in an older version's place, or under everything. */
+  replace(old: MarkerTexture | undefined, tex: MarkerTexture): void {
+    const i = old ? this.list.indexOf(old) : -1;
+    if (i > -1) this.list[i] = tex;
+    else this.list.unshift(tex);
+    if (old) this.forget(old);
+  }
+
+  /** A stroke's pixels changed, or it's gone: the GPU's copy is out of date. */
+  forget(tex: MarkerTexture): void {
+    this.scene.renderer?.invalidateTexture(texSource(tex));
+  }
+
+  /** Remove strokes by their id in the live room. True if there were any. */
+  removeShared(ids: string[]): boolean {
+    const gone = new Set(ids);
+    const found = this.list.filter((t) => t.liveId && gone.has(t.liveId));
+    for (const t of found) this.remove(t);
+    return found.length > 0;
+  }
+
+  dispose(): void {
+    for (const { canvas } of this.list) if (canvas) canvas.width = canvas.height = 0; // frees the memory now
+    this.list = [];
+  }
 }

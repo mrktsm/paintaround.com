@@ -1,33 +1,31 @@
 import type { Viewer } from "mapillary-js";
 import { applyShading, shadeRegion } from "../deep/strokeShading";
-import { SurfaceDecal, loadDeepData, surfaceRing, type DeepData } from "../deep/surfaceDecal";
+import { loadDeepData, type DeepData } from "../deep/surfaceDecal";
 import { mergePieces, type BakedPiece } from "../deep/geodesicMap";
 import { preloadDecalTools, simplify, type ToolType } from "../deep/decalTools";
-import { basicToTex, eraseBox, isBlank, isEraseEdit, type EraseEdit, type UndoEntry } from "./eraser";
+import { BrushCursor } from "./BrushCursor";
+import { Eraser } from "./eraser";
 import { ChalkBrush } from "./flat/crayon";
 import { FountainPenBrush } from "./flat/fountainPen";
 import { Brush, type Drop } from "./flat/marker";
 import { Pen } from "./flat/pencil";
 import type { Projector, SplashParticle, Unprojector } from "./flat/types";
 import { WatercolorBrush } from "./flat/watercolor";
-import { PeerCursors } from "./PeerCursors";
-import { PeerPreviews } from "./PeerPreviews";
+import { LiveRoom } from "./LiveRoom";
 import { buildPanoramaGeometry, buildScreenGeometry, drawTexturedTriangle, projectionUniforms, projectToScreen } from "./projection";
 import { getRainbowHueShift, resolveRainbowColor } from "./rainbow";
 import type { ProjectionContext, Scene } from "./scene";
-import { copyCanvas, ensureCanvas, texSource, type MarkerTexture } from "./strokes";
-import { bakePiece, continues, drawLivePieces, isSky, MID_SAMPLE, paintFrame, pieceTexture, startPiece, type DecalState, type Replay } from "./surfaceStrokes";
+import { Strokes, texSource, type MarkerTexture } from "./strokes";
+import { bakePiece, canPaintSurfaces, continues, drawLivePieces, isSky, MID_SAMPLE, paintFrame, pieceTexture, releasePiece, startPiece, type DecalState } from "./surfaceStrokes";
 import { WebGLDrawingRenderer } from "./WebGLDrawingRenderer";
 import { realtime } from "../realtime/client";
 import type { PreviewView } from "../pool/localPreview";
 import { followCamera, screenProjection, type PhotoTransform, type RenderCamera, type Subscription } from "../viewer/mapillaryInternals";
-import { PAINT_LAYER, type FinishedStroke, type LayerTiles, type ServerMessage } from "../../shared/realtime";
 
 export class DrawingOverlay {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private viewer: Viewer | null = null;
-  private markerTextures: MarkerTexture[] = [];
   private lastPixelX: number = 0;
   private lastPixelY: number = 0;
 
@@ -101,24 +99,20 @@ export class DrawingOverlay {
   private _boundResize: (() => void) | null = null;
   private _boundViewerListeners: (() => void)[] = [];
 
-  // Undo/Redo stacks
-  private _undoStack: UndoEntry[] = [];
-  private _redoStack: UndoEntry[] = [];
-
   // Realtime collaboration
   private lastBroadcastTime: number = 0;
   private _isRainbowStroke: boolean = false; // Current stroke is rainbow
   private _rainbowAnimFrameId: number | null = null; // Animation loop for rainbow textures
-  private _container: HTMLElement | null = null;
 
   /** What's on screen right now, for the parts drawn on top of it. */
   private readonly scene: Scene;
-  private readonly peers: PeerCursors;
-  private readonly peerPreviews: PeerPreviews;
+  private readonly strokes: Strokes;
+  private readonly cursor: BrushCursor;
+  private readonly live: LiveRoom;
+  private readonly eraser: Eraser;
 
   constructor(container: HTMLElement) {
     preloadDecalTools();
-    this._container = container;
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- read live by the getters below
     const overlay = this;
     this.scene = {
@@ -126,19 +120,20 @@ export class DrawingOverlay {
       get deep() { return overlay._deepData; },
       get fov() { return overlay.currentFov; },
       get radPerPx() { return ((overlay.currentFov * Math.PI) / 180) / Math.max(1, overlay.canvas.height); },
+      get height() { return overlay.canvas.height; },
+      get renderer() { return overlay.webglRenderer; },
       projection: () => this.getSyncProjectionContext(),
+      toPanorama: (x, y) => this.screenToBasic(x, y),
       isSky: (u, v) => isSky(this._deepData, u, v),
+      isSkyAt: (x, y) => this.isSkyAt(x, y),
+      redraw: () => void this.render(),
     };
-    this.peers = new PeerCursors(this.scene);
-    this.peerPreviews = new PeerPreviews(this.scene, this.peers, {
-      swap: (remove, add) => {
-        const i = remove ? this.markerTextures.indexOf(remove) : -1;
-        if (i > -1) this.markerTextures.splice(i, 1);
-        if (remove) this.webglRenderer?.invalidateTexture(texSource(remove));
-        if (add) this.markerTextures.push(add);
-        this.render();
-      },
-    });
+    this.strokes = new Strokes(this.scene);
+    this.strokes.onRainbow = () => this._startRainbowAnimationLoop();
+    this.cursor = new BrushCursor(this.scene);
+    this.live = new LiveRoom(this.scene, this.strokes);
+    this.eraser = new Eraser(this.scene, this.strokes, this.live.history, this.live);
+    this.live.history.onUndone = (tex) => this.dropDrips(tex);
     this.canvas = document.createElement("canvas");
     this.canvas.style.position = "absolute";
     this.canvas.style.top = "0";
@@ -203,12 +198,8 @@ export class DrawingOverlay {
   }
 
   private invalidateProjectionCache(): void {
-    this.peers.reproject();
-    // keep the outline pinned to its spot in the scene while the camera moves
-    if (this._cursorAnchor && this._cursorLayer && this._cursorLayer.style.display !== "none") {
-      this._cursorCameraMoved = true;
-      this.reprojectBrushCursor();
-    }
+    this.live.peers.reproject();
+    this.cursor.follow();
     const useGPUPath =
       this.useWebGL &&
       this.webglRenderer?.hasGPUProjection() &&
@@ -221,7 +212,7 @@ export class DrawingOverlay {
     } else {
       // CPU path: mark stale + debounce via rAF
       this.currentRenderId++;
-      for (const tex of this.markerTextures) {
+      for (const tex of this.strokes.list) {
         tex.needsProjection = true;
       }
       if (!this._renderPending) {
@@ -271,170 +262,6 @@ export class DrawingOverlay {
 
   // ── Realtime Collaboration ─────────────────────────────────────────
 
-  /** Join this panorama's live room: others' cursors and strokes appear, ours are shared. */
-  subscribeToRealtime(imageId: string): void {
-    this.unsubscribeFromRealtime();
-    this._liveRoom = imageId;
-    this._realtimeOff = realtime.on((msg) => this.onRealtimeMessage(msg));
-    realtime.join(imageId);
-  }
-
-  /** Called when undo/redo availability changes without a user action (e.g. strokes got baked). */
-  onHistoryChange: (() => void) | null = null;
-
-  // ── The room's paint layer: older strokes, flattened by the server into a few tiles ──
-  private _liveRoom: string | null = null;
-  private _layerTiles = new Map<string, { version: number; tex: MarkerTexture }>();
-  /** load / update these tiles; resolves once they're on screen (so strokes can swap without a gap) */
-  private async applyLayerTiles(tiles: LayerTiles): Promise<void> {
-    const room = this._liveRoom;
-    if (!room) return;
-    const { width: LW, height: LH, tile: T } = PAINT_LAYER;
-    await Promise.all(Object.entries(tiles).map(async ([key, version]) => {
-      if (this._layerTiles.get(key)?.version === version) return;
-      const [tx, ty] = key.split("_").map(Number);
-      try {
-        const blob = await (await fetch(`/api/layer/${encodeURIComponent(room)}/${key}?v=${version}`)).blob();
-        const bitmap = await createImageBitmap(blob);
-        if (this._liveRoom !== room) { bitmap.close?.(); return; }
-        const canvas = document.createElement("canvas");
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
-        bitmap.close?.();
-        // a fine grid so the tile follows the sphere when projected (like baked strokes)
-        const N = 16;
-        const gridBasic: [number, number][][] = [];
-        for (let r = 0; r <= N; r++) {
-          const row: [number, number][] = [];
-          for (let c = 0; c <= N; c++) row.push([(tx * T + (c / N) * T) / LW, (ty * T + (r / N) * T) / LH]);
-          gridBasic.push(row);
-        }
-        const tex: MarkerTexture = {
-          canvas, gridBasic, gridRows: N, gridCols: N,
-          srcWidth: canvas.width, srcHeight: canvas.height, referenceFov: 90, opacity: 1,
-        };
-        const old = this._layerTiles.get(key);
-        if (old && old.version > version) return; // a newer one landed first
-        this._layerTiles.set(key, { version, tex });
-        const i = old ? this.markerTextures.indexOf(old.tex) : -1;
-        // the layer is older paint: it sits under every separate stroke
-        if (i > -1) this.markerTextures[i] = tex;
-        else this.markerTextures.unshift(tex);
-        if (old && this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(old.tex));
-      } catch (err) {
-        console.warn("[realtime] paint layer tile failed:", key, err);
-      }
-    }));
-    this.render();
-  }
-
-  /** Strokes that are now part of the paint layer: drop the separate copies (ours too: undo can't reach into the layer). */
-  private dropFlattened(ids: string[]): void {
-    const gone = new Set(ids);
-    const isGone = (e: unknown) => !!(e as MarkerTexture).liveId && gone.has((e as MarkerTexture).liveId!);
-    this._undoStack = this._undoStack.filter(e => !isGone(e));
-    this._redoStack = this._redoStack.filter(e => !isGone(e));
-    this.removeLiveStrokes(ids);
-    this.onHistoryChange?.();
-  }
-
-  private clearLayerTiles(): void {
-    for (const { tex } of this._layerTiles.values()) {
-      const i = this.markerTextures.indexOf(tex);
-      if (i > -1) this.markerTextures.splice(i, 1);
-      if (this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(tex));
-    }
-    this._layerTiles.clear();
-  }
-
-  /**
-   * Leaving the place: stop listening and leave its live room on the server. Without this the
-   * connection stayed in the room, so coming back to the same place was ignored as "already
-   * there" and its saved drawings never arrived until a reload.
-   */
-  leaveRealtime(): void {
-    this.unsubscribeFromRealtime();
-    this._liveRoom = null;
-    // a stroke finished just now may still be encoding: let it reach the room first
-    if (this._sharing.size) realtime.leaveAfter(Promise.race([Promise.allSettled(this._sharing), new Promise((r) => setTimeout(r, 3000))]));
-    else realtime.leave();
-  }
-
-  unsubscribeFromRealtime(): void {
-    this._realtimeOff?.();
-    this._realtimeOff = null;
-    this.clearLayerTiles();
-    // Clean up others' in-progress strokes and cursors
-    this.peerPreviews.clear();
-    for (const id of [...this._replays.keys()]) this.dropReplays(id);
-    this.peers.clear();
-  }
-
-  private onRealtimeMessage(msg: ServerMessage): void {
-    switch (msg.t) {
-      case "welcome":
-        // strokes others drew in this room before we arrived (held in server memory)
-        this.peers.clear();
-        for (const p of msg.peers) this.peers.colors.set(p.id, p.color);
-        if (msg.layer) void this.applyLayerTiles(msg.layer);
-        for (const s of msg.strokes) void this.addLiveStroke(s);
-        return;
-      case "flattened":
-        // swap the separate strokes for the updated layer once its tiles are on screen
-        void this.applyLayerTiles(msg.tiles).then(() => this.dropFlattened(msg.ids));
-        return;
-      case "peer_join":
-        this.peers.colors.set(msg.peer.id, msg.peer.color);
-        return;
-      case "peer_leave":
-        this.peers.colors.delete(msg.id);
-        this.peers.brush.delete(msg.id);
-        this.peers.remove(msg.id);
-        this.peerPreviews.end(msg.id);
-        this.dropReplays(msg.id);
-        return;
-      case "cursor":
-        this.peers.set(msg.from, msg);
-        return;
-      case "cursor_hide":
-        this.peers.remove(msg.from);
-        return;
-      case "stroke_start":
-        if (msg.seed !== undefined && msg.wpp !== undefined && this.replayStart(msg.from, msg)) return;
-        this.peerPreviews.start(msg.from, msg.color, msg.u, msg.v, msg.group);
-        return;
-      case "stroke_point": {
-        const r = this.liveReplay(msg.from);
-        if (r && msg.pts) return this.replaySamples(r, msg.pts);
-        this.peerPreviews.point(msg.from, msg.u, msg.v);
-        return;
-      }
-      case "stroke_end": {
-        const r = this.liveReplay(msg.from);
-        if (r) return this.replayEnd(msg.from, r);
-        this.peerPreviews.pieceEnded(msg.from);
-        return;
-      }
-      case "stroke_done": {
-        // the finished, lit bitmap replaces the live line once the whole stroke is over
-        const from = msg.from, group = msg.stroke.strokeGroup;
-        // the replayed copy is pixel-identical: swap once the bitmap is on screen
-        // (every piece of it: one bitmap holds the whole stroke)
-        const replays = (this._replays.get(from) ?? []).filter((r) => r.ended && (group === undefined || r.group === group));
-        for (const r of replays) clearTimeout(r.timer);
-        void this.addLiveStroke(msg.stroke).then(() => {
-          requestAnimationFrame(() => { for (const r of replays) this.dropReplay(from, r); });
-          this.peerPreviews.finished(from, group);
-        });
-        return;
-      }
-      case "erase":
-        this.removeLiveStrokes(msg.ids);
-        return;
-    }
-  }
-
   private broadcastStrokeStart(
     color: string,
     lineWidth: number,
@@ -457,35 +284,6 @@ export class DrawingOverlay {
     realtime.send({ t: "stroke_end" });
   }
 
-  /** Tell the room these finished strokes are gone (undo / eraser). */
-  private broadcastEraseStrokes(textures: MarkerTexture[]): void {
-    this._ownChanges = true;
-    const ids = textures.map((t) => t.liveId).filter((id): id is string => !!id);
-    if (ids.length) realtime.send({ t: "erase", ids });
-  }
-
-  /**
-   * Share a finished stroke exactly as we see it: the baked bitmap (3D wrap + lighting
-   * included) and its panorama grid. Called for every finished stroke.
-   */
-  private shareFinishedStroke(tex: MarkerTexture): Promise<void> {
-    this._ownChanges = true;
-    const p = this.sendFinishedStroke(tex).catch((e) => console.warn("[realtime] could not share a stroke:", e));
-    this._sharing.add(p);
-    void p.then(() => this._sharing.delete(p));
-    return p;
-  }
-
-  /** strokes being encoded for the room */
-  private _sharing = new Set<Promise<void>>();
-  /** did we draw, undo or erase here since the last takeOwnChanges? */
-  private _ownChanges = false;
-  takeOwnChanges(): boolean {
-    const c = this._ownChanges;
-    this._ownChanges = false;
-    return c;
-  }
-
   /** Everything painted here as seen from this view (transparent background; ss = supersampling). */
   renderPreview(view: PreviewView, ss: number): HTMLCanvasElement | null {
     const draws = this.drawList().flatMap((tex) => {
@@ -497,215 +295,86 @@ export class DrawingOverlay {
     return this.webglRenderer?.renderPreview(draws, view, ss) ?? null;
   }
 
-  private async sendFinishedStroke(tex: MarkerTexture): Promise<void> {
-    if (!tex.canvas) return;
-    const room = realtime.current;
-    tex.liveId ??= crypto.randomUUID();
-    const canvas = tex.canvas;
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", 0.9));
-    const finalBlob = blob?.type === "image/webp" ? blob : await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-    if (!finalBlob) return;
-    const image = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(finalBlob);
-    });
-    // undone while encoding: don't resurrect it for everyone else
-    if (this._redoStack.includes(tex)) return;
-    if (realtime.current !== room) return; // in another place by now
-    realtime.send({
-      t: "stroke_done",
-      stroke: {
-        id: tex.liveId,
-        image,
-        gridBasic: tex.gridBasic,
-        gridRows: tex.gridRows,
-        gridCols: tex.gridCols,
-        srcWidth: tex.srcWidth,
-        srcHeight: tex.srcHeight,
-        referenceFov: tex.referenceFov,
-        isRainbow: !!tex.isRainbow,
-        toolType: tex.toolType,
-        strokeGroup: tex.strokeGroup,
-      },
-    });
+  /** Join this panorama's live room: others' cursors and strokes appear, ours are shared. */
+  subscribeToRealtime(imageId: string): void {
+    this.live.join(imageId);
   }
 
-  /** Add someone else's finished stroke (or replace it, e.g. after their redo). */
-  private async addLiveStroke(s: FinishedStroke): Promise<void> {
-    const imageId = this._imageId;
-    try {
-      const blob = await (await fetch(s.image)).blob();
-      const bitmap = await createImageBitmap(blob);
-      const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      canvas.getContext("2d")!.drawImage(bitmap, 0, 0);
-      bitmap.close?.();
-      if (this._imageId !== imageId) return; // moved to another panorama meanwhile
-      this.removeLiveStrokes([s.id], false);
-      const tex: MarkerTexture = {
-        canvas,
-        gridBasic: s.gridBasic,
-        gridRows: s.gridRows,
-        gridCols: s.gridCols,
-        srcWidth: s.srcWidth,
-        srcHeight: s.srcHeight,
-        referenceFov: s.referenceFov,
-        toolType: s.toolType,
-        liveId: s.id,
-        opacity: 1,
-        isRainbow: s.isRainbow,
-      };
-      this.markerTextures.push(tex);
-      if (tex.isRainbow) this._startRainbowAnimationLoop();
-      this.render();
-    } catch (err) {
-      console.error("[realtime] could not add a shared stroke:", err);
-    }
+  leaveRealtime(): void {
+    this.live.leave();
   }
 
-  private removeLiveStrokes(ids: string[], render = true): void {
-    const gone = new Set(ids);
-    let changed = false;
-    for (let i = this.markerTextures.length - 1; i >= 0; i--) {
-      const t = this.markerTextures[i];
-      if (!t.liveId || !gone.has(t.liveId)) continue;
-      if (this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(t));
-      this.markerTextures.splice(i, 1);
-      changed = true;
-    }
-    if (changed && render) this.render();
+  /** Did we draw, undo or erase here since the last time this was asked? */
+  takeOwnChanges(): boolean {
+    return this.live.takeOwnChanges();
   }
 
-  private _realtimeOff: (() => void) | null = null;
-  private _lastCursorSend = 0;
+  /** Called when undo or redo became available or not. */
+  set onHistoryChange(f: (() => void) | null) {
+    this.live.history.onChange = f;
+  }
 
-  /** Share our brush position (panorama coords + angular radius) at most ~20 times a second. */
+  canUndo(): boolean {
+    return this.live.history.canUndo();
+  }
+
+  canRedo(): boolean {
+    return this.live.history.canRedo();
+  }
+
+  undo(): void {
+    this.live.history.undo();
+  }
+
+  redo(): void {
+    this.live.history.redo();
+  }
+
+  eraseAt(x: number, y: number, radius: number): void {
+    if (this.viewer) this.eraser.at(x, y, radius);
+  }
+
+  /** End of an eraser gesture. */
+  finalizeEraser(): void {
+    this.eraser.finish();
+  }
+
+  /** Show the brush outline at a screen point, and to everyone else (see BrushCursor.show). */
+  updateBrushCursor(x: number, y: number, radius: number, fillColor: string | null = null): void {
+    this.shareCursor(x, y, radius, fillColor);
+    this.cursor.show(x, y, radius, fillColor, (u, v) => this._activeDecal?.geo.worldPerPxAt(u, v) ?? null);
+  }
+
+  hideBrushCursor(): void {
+    this.live.hideCursor();
+    this.cursor.hide();
+  }
+
   /**
    * Phones have no hover: while a finger draws, share the ring at the stroke's tip so others see
    * where you're painting (and how big your brush is). Your own screen shows nothing extra.
    */
-  shareTouchCursor(pixelX: number, pixelY: number, radiusPx: number, force = false): void {
-    const b = this.screenToBasic(pixelX, pixelY);
-    if (!b) return;
-    if (this._deepData && this.isSkyAt(pixelX, pixelY)) return this.shareCursorHide();
-    this.sendCursor(b, radiusPx, null, force);
+  shareTouchCursor(x: number, y: number, radius: number, force = false): void {
+    this.shareCursor(x, y, radius, null, force);
   }
 
-  /** Others stop seeing our ring (finger lifted, pointer left, over the sky). */
   shareCursorHide(): void {
-    if (this._cursorShared) realtime.send({ t: "cursor_hide" });
-    this._cursorShared = false;
+    this.live.hideCursor();
   }
 
-  private _cursorShared = false;
-
-  private sendCursor(b: [number, number], radiusPx: number, paint: string | null, force = false): void {
-    const now = performance.now();
-    if (!force && now - this._lastCursorSend < 50) return;
-    this._cursorShared = true;
-    this._lastCursorSend = now;
-    const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-    realtime.send({ t: "cursor", u: b[0], v: b[1], radius: radiusPx * radPerPx, paint: paint === "rainbow" ? null : paint });
+  private shareCursor(x: number, y: number, radius: number, paint: string | null, force = false): void {
+    const b = this.screenToBasic(x, y);
+    if (!b) return;
+    if (this.isSkyAt(x, y)) this.live.hideCursor();
+    else this.live.shareCursor(b, radius, paint, force);
   }
 
-  // ── Others' strokes on 3D surfaces: replayed with the same brush ──
-  // The drawer sends the decal's origin + scale, the brush seed and every brush sample, so we
-  // rebuild their decal, run the same tool on the same samples, and draw it with the same
-  // surface shader as our own live strokes. Their finished bitmap is then the same pixels, so
-  // the swap when they let go is invisible.
-  private _replays = new Map<string, Replay[]>();
-
-  private replayStart(id: string, m: { color: string; lineWidth: number; toolType: string; u: number; v: number; fov: number; group?: number; seed?: number; wpp?: number }): boolean {
-    if (!this.canDrawDecals() || m.color === "rainbow") return false;
-    const toolType = (["pencil", "marker", "crayon", "fountainPen", "watercolor"] as const).find((t) => t === m.toolType);
-    if (!toolType) return false;
-    const st = startPiece(this._deepData!, [m.u, m.v], 1, m.wpp, true, { color: m.color, lineWidth: m.lineWidth, toolType }, m.seed ?? 0, m.group ?? 0, m.fov);
-    if (!st) return false;
-    this.peerPreviews.end(id);
-    const r: Replay = { st, group: m.group, ended: false, dead: false, mids: [], tex: null };
-    const list = this._replays.get(id) ?? [];
-    const before = list[list.length - 1];
-    if (before && before.group === m.group) st.tool.resume(before.st.tool);
-    // pieces of a stroke stay until its finished bitmap arrives; a new stroke means the old one is over
-    for (const o of list) if (o.ended && o.group !== m.group) this.expireReplay(id, o, 6000);
-    list.push(r);
-    this._replays.set(id, list);
-    // a stroke that never finishes (sender vanished) doesn't stay forever
-    this.expireReplay(id, r, 60000);
-    return true;
-  }
-
-  private expireReplay(id: string, r: Replay, ms: number): void {
-    clearTimeout(r.timer);
-    r.timer = setTimeout(() => this.dropReplay(id, r), ms);
-  }
-
-  /** The peer's stroke piece still being drawn (null = none, or they draw flat). */
-  private liveReplay(id: string): Replay | null {
-    const list = this._replays.get(id);
-    const r = list?.[list.length - 1];
-    return r && !r.ended ? r : null;
-  }
-
-  /** Feed the drawer's brush samples (u, v, decal x, y) to the same brush, frame by frame. */
-  private replaySamples(r: Replay, pts: number[]): void {
-    if (r.dead) return;
-    const st = r.st, g = st.geo, radius = st.nearRadius * g.s;
-    for (let k = 0; k + 3 < pts.length; k += 4) {
-      const b: [number, number] = [pts[k], pts[k + 1]];
-      const mid = pts[k + 2] >= MID_SAMPLE;
-      const d: [number, number] = [pts[k + 2] - (mid ? MID_SAMPLE : 0), pts[k + 3]];
-      // unwrap and open up the surface along the way
-      const from = st.prev;
-      let du = b[0] - from.basic[0];
-      if (du > 0.5) du -= 1;
-      else if (du < -0.5) du += 1;
-      const dv = b[1] - from.basic[1];
-      const len = Math.hypot(d[0] - from.decal[0], d[1] - from.decal[1]);
-      const n = Math.min(400, Math.max(1, Math.ceil(len / (st.nearRadius * 0.3)), Math.ceil(Math.hypot(du * 2048, dv * 1024) / 12)));
-      for (let i = 1; i <= n; i++) {
-        const u = from.basic[0] + (du * i) / n, v = from.basic[1] + (dv * i) / n;
-        if (g.reach(u, v)) g.markNear(u, v, radius);
-      }
-      st.prev = { basic: b, decal: d, screen: [0, 0] };
-      r.mids.push(d);
-      if (mid) continue;
-      paintFrame(st, r.mids, b, this.canvas.height);
-      r.mids = [];
-    }
-    this.render();
-  }
-
-  private replayEnd(id: string, r: Replay): void {
-    r.ended = true;
-    const piece = bakePiece(r.st);
-    if (piece) r.tex = pieceTexture(piece, r.st);
-    this.releaseDecal(r.st);
-    // the finished bitmap arrives once the whole stroke (all its pieces) is over
-    this.expireReplay(id, r, 60000);
-    this.render();
-  }
-
-  private dropReplay(id: string, r: Replay): void {
-    if (r.dead) return;
-    r.dead = true;
-    clearTimeout(r.timer);
-    const list = this._replays.get(id);
-    if (list) {
-      const i = list.indexOf(r);
-      if (i > -1) list.splice(i, 1);
-      if (!list.length) this._replays.delete(id);
-    }
-    if (r.tex) this.webglRenderer?.invalidateTexture(texSource(r.tex));
-    if (!r.ended) this.releaseDecal(r.st);
-    this.render();
-  }
-
-  private dropReplays(id: string): void {
-    for (const r of [...(this._replays.get(id) ?? [])]) this.dropReplay(id, r);
+  /** Remove an undone stroke's drips and splashes. */
+  private dropDrips(tex: MarkerTexture): void {
+    const id = tex.brushStrokeId;
+    if (!id) return;
+    this.activeDrops = this.activeDrops.filter((d) => d.strokeId !== id);
+    this.activeSplashes = this.activeSplashes.filter((s) => !s.strokeId || s.strokeId !== id);
   }
 
   private resizeCanvas(): void {
@@ -937,9 +606,8 @@ export class DrawingOverlay {
           if (item.texture) {
             item.texture.isLocal = true;
             item.texture.opacity = 1;
-            this.markerTextures.push(item.texture);
-            this._undoStack.push(item.texture);
-            this._redoStack = [];
+            this.strokes.add(item.texture);
+            this.live.history.add(item.texture);
           }
           const idx = this.finalizingStrokes.indexOf(item.stroke);
           if (idx > -1) this.finalizingStrokes.splice(idx, 1);
@@ -988,11 +656,8 @@ export class DrawingOverlay {
                 this.pendingTextures.push({ stroke, texture: tex });
                 if (tex) {
                   tex.brushStrokeId = stroke.brushStrokeId;
-                  if (this._isRainbowStroke) {
-                    tex.isRainbow = true;
-                    this._startRainbowAnimationLoop();
-                  }
-                  void this.shareFinishedStroke(tex);
+                if (this._isRainbowStroke) tex.isRainbow = true;
+                  void this.live.share(tex);
                 }
               })
               .catch(console.error);
@@ -1091,11 +756,8 @@ export class DrawingOverlay {
             .then((tex) => {
               this.pendingPenTextures.push({ stroke, texture: tex });
               if (tex) {
-                if (this._isRainbowStroke) {
-                  tex.isRainbow = true;
-                  this._startRainbowAnimationLoop();
-                }
-                void this.shareFinishedStroke(tex);
+                if (this._isRainbowStroke) tex.isRainbow = true;
+                void this.live.share(tex);
               }
             })
             .catch(console.error);
@@ -1110,9 +772,8 @@ export class DrawingOverlay {
           if (item.texture) {
             item.texture.isLocal = true;
             item.texture.opacity = 1;
-            this.markerTextures.push(item.texture);
-            this._undoStack.push(item.texture);
-            this._redoStack = [];
+            this.strokes.add(item.texture);
+            this.live.history.add(item.texture);
           }
           const idx = this.finalizingPenStrokes.indexOf(item.stroke);
           if (idx > -1) this.finalizingPenStrokes.splice(idx, 1);
@@ -1347,240 +1008,6 @@ export class DrawingOverlay {
 
   // ── 3D surface drawing (decals) ───────────────────────────────────────
 
-  // ── Brush cursor: a circle the size of the brush, wrapped onto the surface under the cursor ──
-  /** Holds the lit paint preview (canvas) under the outline (svg); moved/faded/hidden as one. */
-  private _cursorLayer: HTMLDivElement | null = null;
-  private _cursorSvg: SVGSVGElement | null = null;
-  private _cursorPaths: SVGPathElement[] = [];
-  /** Lit preview of the paint inside the outline: the stroke's colour × the panorama's lighting. */
-  private _cursorFill: HTMLCanvasElement | null = null;
-  private _cursorFillColor: string | null = null;
-
-  private ensureCursorSvg(): void {
-    if (this._cursorLayer || !this._container) return;
-    const layer = document.createElement("div");
-    layer.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:12;overflow:visible";
-    const fill = document.createElement("canvas");
-    // Fully opaque: the preview looks exactly like the paint will once the stroke is released.
-    fill.style.cssText = "position:absolute;left:0;top:0;display:none";
-    layer.appendChild(fill);
-    const NS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(NS, "svg") as SVGSVGElement;
-    svg.style.cssText = "position:absolute;inset:0;width:100%;height:100%;overflow:visible";
-    // dark halo under a white line so it's visible on any background
-    for (const [stroke, width] of [["rgba(0,0,0,0.45)", 3], ["rgba(255,255,255,0.95)", 1.5]] as const) {
-      const path = document.createElementNS(NS, "path") as SVGPathElement;
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke", stroke);
-      path.setAttribute("stroke-width", String(width));
-      svg.appendChild(path);
-      this._cursorPaths.push(path);
-    }
-    layer.appendChild(svg);
-    this._container.appendChild(layer);
-    this._cursorLayer = layer;
-    this._cursorSvg = svg;
-    this._cursorFill = fill;
-  }
-
-  /**
-   * Show the brush outline at a screen point. radius = brush radius in screen px where a fresh
-   * stroke would start. With depth data the circle is laid on the surface (ellipse on the ground
-   * or an angled wall), matching how the stroke will actually land.
-   * fillColor = paint colour to preview inside the outline, lit like a real stroke (shadow, sun,
-   * surface texture); null = outline only (while drawing, rainbow, no colour).
-   */
-  updateBrushCursor(pixelX: number, pixelY: number, radius: number, fillColor: string | null = null): void {
-    this.ensureCursorSvg();
-    if (!this._cursorLayer) return;
-    this._cursorFillColor = fillColor;
-    if (this._cursorCameraMoved && this._cursorCenter && this._cursorLayer.style.display !== "none") {
-      // The outline was pinned to the scene while the camera moved, so it's away from the pointer.
-      // Glide it back (offset the layer by the old position, then transition the offset to zero).
-      const [ox, oy] = this._cursorCenter;
-      const svg = this._cursorLayer;
-      svg.style.transition = "none";
-      svg.style.transform = `translate(${(ox - pixelX).toFixed(1)}px, ${(oy - pixelY).toFixed(1)}px)`;
-      void svg.getBoundingClientRect(); // commit the start position
-      svg.style.transition = "transform 150ms cubic-bezier(0.2, 0.8, 0.2, 1)";
-      svg.style.transform = "translate(0px, 0px)";
-    }
-    this._cursorCameraMoved = false;
-    const N = 64;
-    // Outline built in panorama (basic) coords on the surface under the pointer, then projected.
-    const anchor: [number, number][] = [];
-    const b = this.screenToBasic(pixelX, pixelY);
-    if (b && this._deepData && this.isSkyAt(pixelX, pixelY)) this.shareCursorHide();
-    else if (b) this.sendCursor(b, radius, fillColor);
-    if (b && this._deepData && this.isSkyAt(pixelX, pixelY)) {
-      // Can't paint on the sky: just a small faded dot (a circle would suggest a surface).
-      this._cursorAnchor = { pts: [b], dot: true };
-      this.reprojectBrushCursor(true);
-      return;
-    }
-    if (b && this._deepData) {
-      const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-      const decal = SurfaceDecal.create(this._deepData, b[0], b[1], radPerPx);
-      if (decal) {
-        // walk the ring out along the real surface so it rides over bumps/corners like the paint
-        // mid-stroke, show the size the active stroke will actually paint at here
-        const basis = decal.basis;
-        const s = this._activeDecal?.geo.worldPerPxAt(b[0], b[1]) ?? basis.s;
-        anchor.push(...surfaceRing(this._deepData, basis, radius * s, N));
-      }
-    }
-    if (!anchor.length) {
-      // no depth data: a screen circle, still pinned via its panorama coords when available
-      for (let k = 0; k <= N; k++) {
-        const a = (k / N) * Math.PI * 2;
-        const pb = this.screenToBasic(pixelX + Math.cos(a) * radius, pixelY + Math.sin(a) * radius);
-        if (!pb) {
-          this._cursorAnchor = null;
-          this.drawCursorFill(null);
-          this.drawCursorPath(this.circlePath(pixelX, pixelY, radius), false);
-          return;
-        }
-        anchor.push(pb);
-      }
-    }
-    this._cursorAnchor = { pts: anchor, dot: false };
-    this.reprojectBrushCursor(true);
-  }
-
-  private _cursorAnchor: { pts: [number, number][]; dot: boolean } | null = null;
-
-  /** Set when the camera moved since the last mouse move (the outline drifted off the pointer). */
-  private _cursorCameraMoved = false;
-  /** Screen centre of the outline as last drawn (for the glide back to the pointer). */
-  private _cursorCenter: [number, number] | null = null;
-
-  /**
-   * Redraw the brush outline from its panorama coords. Called on mouse move (show = true) and
-   * whenever the camera moves (only while the cursor is showing).
-   */
-  private reprojectBrushCursor(show = false): void {
-    const a = this._cursorAnchor;
-    if (!a || !this._cursorLayer) return;
-    if (!show && this._cursorLayer.style.display === "none") return;
-    const sync = this.getSyncProjectionContext();
-    if (!sync) return;
-    // project each point; skip the few that can't be projected rather than blanking the cursor
-    let d = "";
-    let pen = false;
-    let shown = 0;
-    let first: [number, number] | null = null;
-    const screen: [number, number][] = [];
-    for (const p of a.pts) {
-      let sp: number[] | null = null;
-      try {
-        sp = sync.proj.basicToCanvas(p, sync.container, sync.renderCamera, sync.transform);
-      } catch {
-        sp = null;
-      }
-      if (!sp) {
-        pen = false;
-        continue;
-      }
-      if (!first) first = [sp[0], sp[1]];
-      screen.push([sp[0], sp[1]]);
-      d += `${pen ? "L" : "M"}${sp[0].toFixed(1)},${sp[1].toFixed(1)}`;
-      pen = true;
-      shown++;
-    }
-    if (!first) {
-      // whole outline is behind the camera: hide just the shape (next mouse move brings it back)
-      for (const path of this._cursorPaths) path.setAttribute("d", "");
-      this.drawCursorFill(null);
-      return;
-    }
-    if (a.dot) {
-      this._cursorCenter = first;
-      this.drawCursorFill(null);
-      this.drawCursorPath(this.circlePath(first[0], first[1], 1.5), true);
-    } else {
-      // centre = average of the projected outline points
-      let cx = 0, cy = 0, n = 0;
-      for (const m of d.matchAll(/[ML](-?[\d.]+),(-?[\d.]+)/g)) { cx += +m[1]; cy += +m[2]; n++; }
-      this._cursorCenter = n ? [cx / n, cy / n] : first;
-      this.drawCursorFill(shown === a.pts.length ? screen : null);
-      this.drawCursorPath(shown === a.pts.length ? d + "Z" : d, false);
-    }
-  }
-
-  /**
-   * Fill the outline polygon (screen px) with the paint colour and light it per pixel with the
-   * same surface map and shadeRegion as live strokes, so the preview darkens and cools in shadow,
-   * warms in sun and picks up the surface texture — before anything is drawn.
-   */
-  private drawCursorFill(poly: [number, number][] | null): void {
-    const canvas = this._cursorFill;
-    if (!canvas) return;
-    const color = this._cursorFillColor;
-    if (!poly || poly.length < 3 || !color || color === "rainbow") {
-      canvas.style.display = "none";
-      return;
-    }
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const [x, y] of poly) {
-      if (x < x0) x0 = x; if (x > x1) x1 = x;
-      if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-    x0 = Math.floor(x0) - 1; y0 = Math.floor(y0) - 1; x1 = Math.ceil(x1) + 1; y1 = Math.ceil(y1) + 1;
-    const w = x1 - x0, h = y1 - y0;
-    if (w < 3 || h < 3 || w * h > 600 * 600) { canvas.style.display = "none"; return; }
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const cw = Math.ceil(w * dpr), ch = Math.ceil(h * dpr);
-    if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    canvas.style.transform = `translate(${x0}px, ${y0}px)`;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, cw, ch);
-    ctx.setTransform(dpr, 0, 0, dpr, -x0 * dpr, -y0 * dpr);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    poly.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.closePath();
-    ctx.fill();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const surface = this._deepShade;
-    if (surface) {
-      // coarse screen -> panorama grid over the box, interpolated per pixel inside shadeRegion
-      const G = 6;
-      const grid: ([number, number] | null)[][] = [];
-      for (let r = 0; r <= G; r++) {
-        const row: ([number, number] | null)[] = [];
-        for (let c = 0; c <= G; c++) row.push(this.screenToBasic(x0 + (c / G) * w, y0 + (r / G) * h));
-        grid.push(row);
-      }
-      shadeRegion(ctx, 0, 0, cw, ch, grid, surface);
-    }
-    canvas.style.display = "";
-  }
-
-  private circlePath(x: number, y: number, r: number): string {
-    return `M${(x - r).toFixed(1)},${y.toFixed(1)}a${r},${r} 0 1,0 ${2 * r},0a${r},${r} 0 1,0 ${-2 * r},0`;
-  }
-
-  /** Update the outline; `disabled` = faded (e.g. the dot over the sky, where you can't paint). */
-  private drawCursorPath(d: string, disabled: boolean): void {
-    if (!this._cursorSvg) return;
-    for (const path of this._cursorPaths) {
-      path.setAttribute("d", d);
-      path.removeAttribute("stroke-dasharray");
-    }
-    if (!this._cursorLayer) return;
-    this._cursorLayer.style.opacity = disabled ? "0.6" : "1";
-    this._cursorLayer.style.display = "";
-  }
-
-  hideBrushCursor(): void {
-    this.shareCursorHide();
-    if (this._cursorLayer) this._cursorLayer.style.display = "none";
-  }
-
   /** Build a surface decal for a stroke starting at this screen point (null = draw flat). */
   private makeDecal(pixelX: number, pixelY: number, worldPerPx?: number): DecalState | null {
     const why = (r: string) => {
@@ -1588,7 +1015,7 @@ export class DrawingOverlay {
       return null;
     };
     if (!this._deepData) return why("no deep data");
-    if (!this.canDrawDecals()) return why("no GPU support");
+    if (!canPaintSurfaces(this.scene)) return why("no GPU support");
     const b = this.screenToBasic(pixelX, pixelY);
     if (!b) return why("no projection");
     const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
@@ -1597,10 +1024,6 @@ export class DrawingOverlay {
     st.prev.screen = [pixelX, pixelY];
     if (import.meta.env.DEV && (globalThis as { __deepDebug?: boolean }).__deepDebug) console.info(`[deep] wrap @${pixelX | 0},${pixelY | 0}${worldPerPx ? " (chained)" : ""}`);
     return st;
-  }
-
-  private canDrawDecals(): boolean {
-    return !!(this._deepData && this.useWebGL && this.webglRenderer?.hasGPUProjection() && this.webglRenderer.hasDeepStrokes());
   }
 
   /** Screen px -> basic coords via Mapillary's sync projection (null if unavailable). */
@@ -1746,11 +1169,6 @@ export class DrawingOverlay {
     paintFrame(st, kept, track[track.length - 1].basic, this.canvas.height);
   }
 
-  private releaseDecal(st: DecalState): void {
-    this.webglRenderer?.releaseDeepStroke(st.geo);
-    st.geo.release();
-  }
-
   /** End a piece: bake it now (it's small), free its surface map, keep the picture on screen. */
   private endPiece(st: DecalState): void {
     this.paintTrack(st);
@@ -1758,7 +1176,7 @@ export class DrawingOverlay {
     this.broadcastStrokeEnd();
     const piece = bakePiece(st);
     if (piece) this._pieces.push({ piece, tex: pieceTexture(piece, st) });
-    this.releaseDecal(st);
+    releasePiece(this.scene, st);
     if (this._activeDecal === st) this._activeDecal = null;
   }
 
@@ -1784,26 +1202,23 @@ export class DrawingOverlay {
       for (const p of pieces) this.webglRenderer?.invalidateTexture(texSource(p.tex));
     }
     tex.isLocal = true;
-    this.markerTextures.push(tex);
-    this._undoStack.push(tex);
-    this._redoStack = [];
-    this.onHistoryChange?.();
-    void this.shareFinishedStroke(tex);
+    this.strokes.add(tex);
+    this.live.history.add(tex);
+    void this.live.share(tex);
     this.render();
   }
 
   /** Everything baked that's on screen: finished strokes, then pieces of strokes in progress. */
   private drawList(): MarkerTexture[] {
     const extra: MarkerTexture[] = [];
-    for (const list of this._replays.values()) for (const r of list) if (r.tex) extra.push(r.tex);
+    extra.push(...this.live.replays.strokes());
     for (const p of this._pieces) extra.push(p.tex);
-    return extra.length ? [...this.markerTextures, ...extra] : this.markerTextures;
+    return extra.length ? [...this.strokes.list, ...extra] : this.strokes.list;
   }
 
   /** Live (in-progress) 3D strokes to draw this frame. */
   private liveDecals(): DecalState[] {
-    const out: DecalState[] = [];
-    for (const list of this._replays.values()) for (const r of list) if (!r.ended && !r.dead && r.st.hasPaint) out.push(r.st);
+    const out = this.live.replays.pieces();
     if (this._activeDecal?.hasPaint) out.push(this._activeDecal);
     return out;
   }
@@ -1881,231 +1296,6 @@ export class DrawingOverlay {
     }
   }
 
-  canUndo(): boolean {
-    return this._undoStack.length > 0;
-  }
-
-  canRedo(): boolean {
-    return this._redoStack.length > 0;
-  }
-
-  /** Undo the last stroke — all of its pieces if it crossed several surfaces. */
-  undo(): void {
-    const top = this._undoStack[this._undoStack.length - 1];
-    if (isEraseEdit(top)) {
-      this._undoStack.pop();
-      this.applyEraseEdit(top, true);
-      this._redoStack.push(top);
-      return;
-    }
-    const group = top?.strokeGroup;
-    do {
-      this.undoOne();
-    } while (group !== undefined && this._undoStack[this._undoStack.length - 1]?.strokeGroup === group);
-  }
-
-  private undoOne(): void {
-    if (isEraseEdit(this._undoStack[this._undoStack.length - 1])) return;
-    const tex = this._undoStack.pop() as MarkerTexture | undefined;
-    if (!tex) return;
-    // Remove drips/splashes belonging to this stroke
-    if (tex.brushStrokeId) {
-      this.activeDrops = this.activeDrops.filter(
-        (d) => d.strokeId !== tex.brushStrokeId,
-      );
-      this.activeSplashes = this.activeSplashes.filter(
-        (s) => !s.strokeId || s.strokeId !== tex.brushStrokeId,
-      );
-    }
-
-    // Remove from markerTextures
-    const idx = this.markerTextures.indexOf(tex);
-    if (idx > -1) this.markerTextures.splice(idx, 1);
-
-    // Free WebGL texture
-    if (this.webglRenderer) {
-      this.webglRenderer.invalidateTexture(texSource(tex));
-    }
-
-    this.broadcastEraseStrokes([tex]);
-
-    this._redoStack.push(tex);
-    this.render();
-  }
-
-  redo(): void {
-    const top = this._redoStack[this._redoStack.length - 1];
-    if (isEraseEdit(top)) {
-      this._redoStack.pop();
-      this.applyEraseEdit(top, false);
-      this._undoStack.push(top);
-      return;
-    }
-    const group = top?.strokeGroup;
-    do {
-      this.redoOne();
-    } while (group !== undefined && this._redoStack[this._redoStack.length - 1]?.strokeGroup === group);
-  }
-
-  private redoOne(): void {
-    if (isEraseEdit(this._redoStack[this._redoStack.length - 1])) return;
-    const tex = this._redoStack.pop() as MarkerTexture | undefined;
-    if (!tex) return;
-
-    // Re-add to markerTextures
-    this.markerTextures.push(tex);
-    this._undoStack.push(tex);
-
-    // put it back for everyone in the live room (same id)
-    void this.shareFinishedStroke(tex);
-
-    this.render();
-  }
-
-  // ── Eraser: a brush that rubs out our own paint ──
-  // The eraser footprint is the same surface-wrapped ring as the brush cursor. Each stamp is
-  // mapped into the bitmaps of our strokes underneath and cut out (destination-out). One
-  // gesture = one undo step; trimmed strokes are re-shared with the room under the same id.
-  private _eraseSession: EraseEdit | null = null;
-  private _lastErase: [number, number] | null = null;
-  private _lastEraseShare = 0;
-
-  eraseAt(pixelX: number, pixelY: number, radius = 12): void {
-    if (!this.viewer) return;
-    // stamp along the path since the last point, so fast moves leave no gaps
-    const last = this._lastErase;
-    const dist = last ? Math.hypot(pixelX - last[0], pixelY - last[1]) : 0;
-    const steps = last ? Math.min(40, Math.max(1, Math.ceil(dist / (radius * 0.4)))) : 1;
-    let changed = false;
-    for (let k = 1; k <= steps; k++) {
-      const x = last ? last[0] + ((pixelX - last[0]) * k) / steps : pixelX;
-      const y = last ? last[1] + ((pixelY - last[1]) * k) / steps : pixelY;
-      const ring = this.eraserFootprint(x, y, radius);
-      if (ring && this.eraseFootprint(ring)) changed = true;
-    }
-    this._lastErase = [pixelX, pixelY];
-    if (!changed) return;
-    this.render();
-    // others watch it get rubbed out (a few times a second; the final state goes on release)
-    const now = performance.now();
-    if (now - this._lastEraseShare > 400 && this._eraseSession) {
-      this._lastEraseShare = now;
-      for (const tex of this._eraseSession.items.keys()) if (this.markerTextures.includes(tex)) void this.shareFinishedStroke(tex);
-    }
-  }
-
-  /** The eraser outline at a screen point, in panorama coords (on the surface when we have depth). */
-  private eraserFootprint(x: number, y: number, radius: number): [number, number][] | null {
-    const b = this.screenToBasic(x, y);
-    if (!b) return null;
-    if (this._deepData) {
-      const radPerPx = ((this.currentFov * Math.PI) / 180) / Math.max(1, this.canvas.height);
-      const decal = SurfaceDecal.create(this._deepData, b[0], b[1], radPerPx);
-      if (decal) return surfaceRing(this._deepData, decal.basis, radius * decal.basis.s, 32);
-    }
-    const ring: [number, number][] = [];
-    for (let k = 0; k <= 32; k++) {
-      const a = (k / 32) * Math.PI * 2;
-      const p = this.screenToBasic(x + Math.cos(a) * radius, y + Math.sin(a) * radius);
-      if (p) ring.push(p);
-    }
-    return ring.length > 8 ? ring : null;
-  }
-
-  /** Cut one footprint out of every own stroke under it. True if anything was touched. */
-  private eraseFootprint(ring: [number, number][]): boolean {
-    let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
-    for (const [u, v] of ring) {
-      if (u < u0) u0 = u; if (u > u1) u1 = u;
-      if (v < v0) v0 = v; if (v > v1) v1 = v;
-    }
-    const cu = (u0 + u1) / 2;
-    let touched = false;
-    for (const tex of this.markerTextures) {
-      if (!tex.isLocal) continue;
-      const box = eraseBox(tex);
-      // compare with the footprint shifted by whole turns towards the stroke (panorama seam)
-      const shift = Math.round((box[0] + box[2]) / 2 - cu);
-      if (u1 + shift < box[0] || u0 + shift > box[2] || v1 < box[1] || v0 > box[3]) continue;
-      const pts: [number, number][] = [];
-      for (const [u, v] of ring) {
-        const t = basicToTex(tex, u + shift, v);
-        if (t) pts.push(t);
-      }
-      if (pts.length < 3) continue;
-      // first touch in this gesture: keep the pixels for undo
-      const session = (this._eraseSession ??= { kind: "erase", items: new Map() });
-      if (!session.items.has(tex)) {
-        if (!tex.canvas && this.webglRenderer) this.webglRenderer.invalidateTexture(texSource(tex));
-        session.items.set(tex, { before: copyCanvas(ensureCanvas(tex)), removed: false });
-      }
-      const canvas = tex.canvas!;
-      const ctx = canvas.getContext("2d")!;
-      ctx.save();
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.beginPath();
-      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-      if (this.webglRenderer) this.webglRenderer.invalidateTexture(canvas);
-      touched = true;
-    }
-    return touched;
-  }
-
-  /**
-   * End of an eraser gesture: strokes rubbed out completely are removed, the rest are re-shared
-   * trimmed; the whole gesture becomes one undo step.
-   */
-  finalizeEraser(): void {
-    this._lastErase = null;
-    const session = this._eraseSession;
-    this._eraseSession = null;
-    if (!session) return;
-    const removed: MarkerTexture[] = [];
-    for (const [tex, item] of session.items) {
-      if (!tex.canvas) continue;
-      item.after = copyCanvas(tex.canvas);
-      if (isBlank(tex.canvas)) {
-        item.removed = true;
-        removed.push(tex);
-        const i = this.markerTextures.indexOf(tex);
-        if (i > -1) this.markerTextures.splice(i, 1);
-        if (this.webglRenderer) this.webglRenderer.invalidateTexture(tex.canvas);
-      } else {
-        void this.shareFinishedStroke(tex);
-      }
-    }
-    if (removed.length) this.broadcastEraseStrokes(removed);
-    this._undoStack.push(session);
-    this._redoStack = [];
-    this.render();
-  }
-
-  /** Put an erase gesture's strokes back to before (undo) or after (redo) it. */
-  private applyEraseEdit(edit: EraseEdit, undo: boolean): void {
-    const gone: MarkerTexture[] = [];
-    for (const [tex, item] of edit.items) {
-      const src = undo ? item.before : item.after;
-      if (!src || !tex.canvas) continue;
-      const ctx = tex.canvas.getContext("2d")!;
-      ctx.clearRect(0, 0, tex.canvas.width, tex.canvas.height);
-      ctx.drawImage(src, 0, 0);
-      if (this.webglRenderer) this.webglRenderer.invalidateTexture(tex.canvas);
-      const shown = this.markerTextures.includes(tex);
-      if (item.removed && !undo) {
-        if (shown) this.markerTextures.splice(this.markerTextures.indexOf(tex), 1);
-        gone.push(tex);
-        continue;
-      }
-      if (!shown) this.markerTextures.push(tex);
-      void this.shareFinishedStroke(tex);
-    }
-    if (gone.length) this.broadcastEraseStrokes(gone);
-    this.render();
-  }
-
   private getSyncProjectionContext(): ProjectionContext | null {
     if (!this.viewer || !this._cachedRenderCamera || !this._cachedTransform) return null;
     const p = screenProjection(this.viewer);
@@ -2151,7 +1341,7 @@ export class DrawingOverlay {
     const asyncProjections: Promise<number[] | null>[] = [];
     const asyncMeta: { tex: MarkerTexture; startIdx: number }[] = [];
 
-    for (const tex of this.markerTextures) {
+    for (const tex of this.strokes.list) {
       if (tex.isProjecting) continue;
       if (tex.cachedProjection && !tex.needsProjection) continue;
 
@@ -2218,7 +1408,7 @@ export class DrawingOverlay {
       }
     }
 
-    for (const tex of this.markerTextures) {
+    for (const tex of this.strokes.list) {
       if (!tex.cachedProjection) continue;
       const texOpacity = tex.opacity ?? 1;
 
@@ -2362,7 +1552,7 @@ export class DrawingOverlay {
 
     const loop = () => {
       // Check if any rainbow textures still exist
-      const hasRainbow = this.markerTextures.some((t) => t.isRainbow);
+      const hasRainbow = this.strokes.list.some((t) => t.isRainbow);
       if (!hasRainbow) {
         this._rainbowAnimFrameId = null;
         return;
@@ -2382,11 +1572,8 @@ export class DrawingOverlay {
   }
 
   dispose(): void {
-    this._cursorLayer?.remove();
-    this._cursorLayer = null;
-    this.peers.dispose();
-    this._cursorSvg = null;
-    this._cursorFill = null;
+    this.cursor.dispose();
+    this.live.peers.dispose();
     if (this.animationFrameId) {
       cancelAnimationFrame(this.animationFrameId);
     }
@@ -2413,7 +1600,7 @@ export class DrawingOverlay {
     this.pendingPenTextures = [];
 
     // Clean up remote strokes and leave the place's live room
-    this.leaveRealtime();
+    this.live.leave();
 
     // Clean up RxJS subscriptions
     for (const sub of this._internalSubs) {
@@ -2425,16 +1612,8 @@ export class DrawingOverlay {
     for (const off of this._boundViewerListeners) off();
     this._boundViewerListeners = [];
 
-    // Clean up texture canvases to free memory
-    for (const tex of this.markerTextures) {
-      if (tex.canvas) {
-        tex.canvas.width = 0;
-        tex.canvas.height = 0;
-      }
-    }
-    this.markerTextures = [];
-    this._undoStack = [];
-    this._redoStack = [];
+    this.strokes.dispose();
+    this.live.history.clear();
 
     if (this.webglRenderer) {
       this.webglRenderer.dispose();

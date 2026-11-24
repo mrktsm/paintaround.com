@@ -3,7 +3,7 @@ import LegalPage, { Section } from './legal/LegalPage';
 export default function Terms() {
   return (
     <LegalPage title="Terms of Service" updated="November 23, 2026">
-      <p>These Terms of Service (the "Terms") govern your use of paintaround at paintaround.com (the "Service"), where you explore 360° photos of real places and draw on them live, together with whoever else is looking at the same place.</p>
+      <p>These Terms of Service (the "Terms") govern your use of paintaround.com (the "Service"), where you explore 360° photos of real places and draw on them live, together with whoever else is looking at the same place.</p>
 
       <Section n={1} heading="Agreement">
         <p>By using the Service, you agree to these Terms and to our <a href="/privacy">Privacy Policy</a>. If you don't agree, please don't use the Service.</p>

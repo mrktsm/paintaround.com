@@ -13,17 +13,55 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="manifest" href="/manifest.json" />
   <title>paintaround.com</title>
-  <meta property="og:title" content="Draw on the world" />
-  <meta property="og:description" content="Leave your mark on Street View. Draw, discover, and explore what others have left behind." />
+  <meta property="og:title" content="paintaround.com" />
+  <meta property="og:description" content="Draw on 360° places around the world, live with other people." />
   <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="paintaround.com" />
+  <meta property="og:url" content="https://paintaround.com/" />
+  <meta name="description" content="Draw on 360° places around the world, live with other people." />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Draw on the world" />
-  <meta name="twitter:description" content="Leave your mark on Street View. Draw, discover, and explore what others have left behind." />
+  <meta name="twitter:title" content="paintaround.com" />
+  <meta name="twitter:description" content="Draw on 360° places around the world, live with other people." />
   <!-- before the app's CSS loads: no white flash -->
   <style>html, body { background: #09090b; }</style>
   <script>
     // opened from the home screen (iPhones report it as navigator.standalone)
     if (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches) document.documentElement.classList.add('standalone');
+  </script>
+  <script>
+    // iOS 26 home-screen apps: the page is told the screen is shorter than it is by exactly the status
+    // bar (793 of 852 pt), which leaves a black strip at the bottom. When the numbers match that bug
+    // exactly, size the app to the real screen (html.short-screen + --screen-h, see App.css).
+    (function () {
+      if (navigator.standalone !== true) return;
+      var de = document.documentElement, fixed = 0;
+      function safeTop() {
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;top:0;width:0;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none';
+        de.appendChild(d);
+        var h = d.getBoundingClientRect().height;
+        d.remove();
+        return h;
+      }
+      function check() {
+        var tall = innerHeight >= innerWidth;
+        var h = tall ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+        var w = tall ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+        if (fixed) { if (fixed === h) return; fixed = 0; de.classList.remove('short-screen'); } // turned: look again
+        var top = safeTop(), gap = h - innerHeight;
+        if (Math.abs(innerWidth - w) > 1 || top < 20 || Math.abs(gap - top) > 4) return;
+        fixed = h;
+        de.style.setProperty('--screen-h', h + 'px');
+        de.classList.add('short-screen');
+        dispatchEvent(new Event('resize')); // the map and the 360 view re-measure
+      }
+      check();
+      ['DOMContentLoaded', 'load', 'pageshow', 'resize'].forEach(function (e) { addEventListener(e, check); });
+      addEventListener('orientationchange', function () { setTimeout(check, 350); });
+      [250, 800, 1800].forEach(function (t) { setTimeout(check, t); });
+      // the page is now a little taller than what iOS thinks is visible: never let it scroll
+      addEventListener('scroll', function () { if (fixed && scrollY && !de.classList.contains('legal-doc')) scrollTo(0, 0); });
+    })();
   </script>
   <script>
     // Fix iOS Safari viewport height — uses visualViewport API with debounced fallback

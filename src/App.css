@@ -48,6 +48,12 @@ body {
   touch-action: manipulation;
 }
 
+/* iOS 26 home-screen apps only (set in index.html when the phone shows the bug): the real screen height */
+html.short-screen { min-height: var(--screen-h); }
+html.short-screen:not(.legal-doc) body { height: var(--screen-h); }
+html.short-screen:not(.legal-doc) #root { bottom: auto; height: var(--screen-h); }
+html.short-screen .loading-overlay { position: absolute; bottom: auto; height: var(--screen-h); }
+
 /* the photo fills the whole screen, under the status bar and home indicator (viewport-fit=cover);
    only the controls on top keep out of the safe areas */
 .viewer-container {

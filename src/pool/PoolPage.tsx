@@ -53,7 +53,7 @@ export default function PoolPage() {
   };
 
   return <main ref={pageRef} className="pool-page">
-    <header className="pool-nav"><Link to="/">← paintaround</Link><span>THE PANORAMA POOL</span><button onClick={exportPool}>Export {filter === 'kept' ? 'shortlist' : 'pool'} ↗</button></header>
+    <header className="pool-nav"><Link to="/">← paintaround.com</Link><span>THE PANORAMA POOL</span><button onClick={exportPool}>Export {filter === 'kept' ? 'shortlist' : 'pool'} ↗</button></header>
     {selected ? <section className="pool-detail">
       <button className="pool-back" onClick={() => setParams({})}>← All {pool.items.length} places</button>
       <div className="pool-detail-heading"><div><p className="pool-eyebrow">{selected.location}</p><h1>{selected.title}</h1></div><span className="pool-badge">{selected.license}</span></div>

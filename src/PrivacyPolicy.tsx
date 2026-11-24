@@ -3,7 +3,7 @@ import LegalPage, { Section } from './legal/LegalPage';
 export default function PrivacyPolicy() {
   return (
     <LegalPage title="Privacy Policy" updated="November 23, 2026">
-      <p>This Privacy Policy explains what information paintaround at paintaround.com (the "Service") handles when you use it. In short: there are no accounts, we don't track you, and drawings are kept only temporarily. New drawings may be checked automatically for harmful content.</p>
+      <p>This Privacy Policy explains what information paintaround.com (the "Service") handles when you use it. In short: there are no accounts, we don't track you, and drawings are kept only temporarily. New drawings may be checked automatically for harmful content.</p>
 
       <Section n={1} heading="No accounts">
         <p>You never sign up. We don't ask for your name, email address, phone number or password, and we don't use sign-in services.</p>

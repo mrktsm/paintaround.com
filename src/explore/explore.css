@@ -39,6 +39,9 @@
   cursor: pointer;
 }
 
+/* iOS 26 home-screen apps (see index.html): the real screen height, not the short one it reports */
+html.short-screen .ex { position: absolute; bottom: auto; height: var(--screen-h); }
+
 /* ── Side (rail + panel) floats over the full-screen map ── */
 .ex-side {
   position: absolute;
@@ -654,7 +657,7 @@
 
 /* ══ Phones: Apple Maps-style bottom sheet ════════════════════════════════════════════════ */
 .ex-sheet {
-  position: fixed;
+  position: absolute; /* in .ex, which is the whole screen */
   left: 0;
   right: 0;
   bottom: 0;
@@ -794,7 +797,7 @@
 .ex--phone .ex-maptiler-logo { left: 12px; bottom: calc(var(--sheet-h, 96px) + 10px); }
 
 /* ── Cities picker: a second sheet stacked over the main one ── */
-.ex-modal { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+.ex-modal { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
 .ex-modal.is-open { pointer-events: auto; }
 .ex-modal__scrim {
   position: absolute;

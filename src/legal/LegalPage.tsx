@@ -10,7 +10,7 @@ export default function LegalPage({ title, updated, children }: { title: string;
     // because overscroll-behavior: none on body keeps the wheel from chaining up to the page.
     const html = document.documentElement;
     const prev = document.title;
-    document.title = `${title} · paintaround`;
+    document.title = `${title} · paintaround.com`;
     html.classList.add('legal-doc');
     return () => {
       html.classList.remove('legal-doc');

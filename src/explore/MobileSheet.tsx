@@ -83,8 +83,9 @@ export default function MobileSheet({
     const probe = document.createElement('div');
     probe.style.cssText = 'position:fixed;top:0;left:0;width:0;box-sizing:content-box;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none';
     document.body.appendChild(probe);
+    const frame = sheet.current?.parentElement;
     const measure = () => {
-      setVh(window.innerHeight);
+      setVh(frame?.clientHeight || window.innerHeight); // the map's frame: the real screen height
       const s = getComputedStyle(probe);
       const top = parseFloat(s.paddingTop) || 0, bottom = parseFloat(s.paddingBottom) || 0;
       setSafe(prev => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
@@ -92,6 +93,7 @@ export default function MobileSheet({
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(probe);
+    if (frame) ro.observe(frame);
     window.addEventListener('resize', measure);
     return () => { window.removeEventListener('resize', measure); ro.disconnect(); probe.remove(); };
   }, []);

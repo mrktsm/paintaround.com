@@ -33,12 +33,16 @@ test('paint lands under the pointer', async ({ browser }) => {
 
 for (const flat of [false, true]) {
   test(`paint turns with the scene${flat ? ' without 3D data' : ''}`, async ({ browser }) => {
-    const clean = await visit(browser, { alone: true, flat }), p = await visit(browser, { alone: true, flat });
+    const p = await visit(browser, { alone: true, flat });
     await pick(p, 'marker');
+    const before = await look(p);
     await drag(p, [700, 600], [800, 600]);
-    // the place turned the same way, with and without paint
-    const turn = async (page: typeof p) => { await drag(page, [700, 460], [560, 460], { button: 'right' }); return look(page); };
-    const [before, after] = [await look(clean), await look(p)], [beforeTurned, afterTurned] = [await turn(clean), await turn(p)];
+    const after = await look(p);
+    await drag(p, [700, 460], [560, 460], { button: 'right' });
+    const afterTurned = await look(p);
+    await p.click('[aria-label="Undo"]');
+    await p.waitForTimeout(900);
+    const beforeTurned = await look(p);
     const at = await middle(before, after), turned = await middle(beforeTurned, afterTurned);
     expect(Math.abs(at.x - 750)).toBeLessThan(20);
     expect(at.x - turned.x).toBeGreaterThan(60);

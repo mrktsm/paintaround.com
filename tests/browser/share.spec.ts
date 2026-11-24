@@ -6,6 +6,7 @@ needsPlace();
 /** The link you get from the share button. */
 async function sharedLink(page: Page): Promise<string> {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.evaluate(() => { Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); }); // no share sheet here
   await page.click('.view-share');
   await expect(page.locator('.view-copied')).toHaveText('Link copied');
   return page.evaluate(() => navigator.clipboard.readText());
@@ -73,6 +74,28 @@ test('its loading picture is the view it opens with, drawings included, and noth
   const elsewhere = await visit(browser);
   expect(await changed(loading, await elsewhere.screenshot())).toBeGreaterThan(200_000);
   await page.context().close();
+});
+
+test('where there is a share sheet it opens, with the link; closing it is fine', async ({ browser }) => {
+  const p = await visit(browser, { alone: true });
+  await p.evaluate(() => {
+    const w = window as unknown as { __shared: string[]; __fail: string | null };
+    w.__shared = [];
+    w.__fail = null;
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async (d: { url: string }) => { w.__shared.push(d.url); if (w.__fail) throw new DOMException('no', w.__fail); } });
+  });
+  await p.click('.view-share');
+  await expect.poll(() => p.evaluate(() => (window as unknown as { __shared: string[] }).__shared[0])).toMatch(new RegExp(`/view\\?imageId=${PLACE}&at=`));
+  await p.evaluate(() => { (window as unknown as { __fail: string }).__fail = 'AbortError'; });
+  await p.click('.view-share');
+  await p.waitForTimeout(400);
+  await expect(p.locator('.view-copied')).toHaveCount(0);
+  // a sheet that can't open: the link is copied instead
+  await p.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await p.evaluate(() => { (window as unknown as { __fail: string }).__fail = 'NotAllowedError'; });
+  await p.click('.view-share');
+  await expect(p.locator('.view-copied')).toBeVisible();
+  expect(p.problems).toEqual([]);
 });
 
 test('when its picture can\'t be made, the link still opens', async ({ browser }) => {

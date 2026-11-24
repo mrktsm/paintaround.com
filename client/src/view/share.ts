@@ -12,11 +12,15 @@ export async function shareLink(viewer: Viewer, id: string): Promise<string> {
   return `${location.origin}/view?imageId=${encodeURIComponent(id)}&at=${formatAt(at)}`;
 }
 
-/** Phones get their share sheet; elsewhere the link is copied. True: copied. */
+/** The system's share sheet, or where there's none the link is copied. True: copied. */
 export async function share(url: string): Promise<boolean> {
-  if (navigator.maxTouchPoints > 0 && navigator.share) {
-    await navigator.share({ url }).catch((e: Error) => { if (e.name !== 'AbortError') throw e; }); // closed without sharing
-    return false;
+  if (navigator.share) {
+    try {
+      await navigator.share({ url });
+      return false;
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return false; // closed without sharing
+    }
   }
   await navigator.clipboard.writeText(url);
   return true;

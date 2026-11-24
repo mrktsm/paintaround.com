@@ -87,7 +87,7 @@ test('holding Space drags the view instead of drawing', async ({ browser }) => {
 
 test('dragging the view: it sticks to the pointer, and stays where it\'s let go', async ({ browser }) => {
   const p = await visit(browser, { alone: true });
-  await pick(p, 'pencil'); // put it down
+  await p.click('.pen-btn.pencil'); // put it down
   const a = await looking(p);
   await p.mouse.move(700, 400);
   await p.mouse.down();
@@ -102,8 +102,10 @@ test('dragging the view: it sticks to the pointer, and stays where it\'s let go'
 test('putting the pen down: dragging looks around; picking one up draws again', async ({ browser }) => {
   const p = await visit(browser, { alone: true });
   await pick(p, 'marker');
-  await pick(p, 'marker'); // the same one: put down
+  await p.click('.pen-btn.marker'); // the same one: put down
   await expect(p.locator('.pen-btn.active')).toHaveCount(0);
+  await expect(p.locator('.view-hint')).toHaveText('Drag to look around');
+  await expect(p.locator('.view-hint')).toHaveCount(0, { timeout: 4000 });
   const a = await looking(p);
   await drag(p, [800, 500], [600, 500]);
   await p.waitForTimeout(700);

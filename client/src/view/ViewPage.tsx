@@ -8,7 +8,7 @@ import { DEFAULT_PANORAMA, PANORAMA_BY_ID, placeByName, placePath, type Panorama
 import { showOwnDrawing } from '../pool/localPreview';
 import { recordVisit } from '../pool/visited';
 import { DARK_UI } from '../theme';
-import { LoadingSpinner, PhotoCredit, Tutorial, UndoRedo, ViewActions } from './controls';
+import { Hint, LoadingSpinner, PhotoCredit, Tutorial, UndoRedo, ViewActions } from './controls';
 import { share, shareLink } from './share';
 import Toolbar from './Toolbar';
 import type { Tool } from './tools';
@@ -81,6 +81,7 @@ function View({ panorama, at }: { panorama: Panorama; at: LookingAt | null }) {
           onShare={async () => !!viewer.current && share(await shareLink(viewer.current, panorama.id))}
           onDone={close}
         />
+        {!tool && <Hint>Drag to look around</Hint>}
         <Toolbar tool={tool} colors={colors} onTool={t => setTool(now => (now === t ? null : t))} onColor={setColor} />
       </div>
       {!isLoaded && !failed && <LoadingSpinner />}

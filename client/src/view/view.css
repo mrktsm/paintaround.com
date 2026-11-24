@@ -98,6 +98,13 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   white-space: nowrap;
   pointer-events: none;
 }
+.view-hint {
+  top: calc(72px + env(safe-area-inset-top, 0px));
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+}
 
 /* Reveal the panorama immediately when its image is ready. */
 .viewer-container div[class^="mapillary"] {

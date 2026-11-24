@@ -101,6 +101,16 @@ export function ViewActions({ canShare, onShare, onDone }: { canShare: boolean; 
   );
 }
 
+/** A short note at the top, for a moment (remounted for each one). */
+export function Hint({ children }: { children: ReactNode }) {
+  const [shown, setShown] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setShown(false), 2200);
+    return () => clearTimeout(timer);
+  }, []);
+  return shown && <span className="view-copied view-hint" role="status" style={GLASS}>{children}</span>;
+}
+
 /**
  * Credit for photos that aren't CC0: the shortest complete form, like a map's © line. The name links
  * to the source page, the license name to the exact license version; that the photo was changed

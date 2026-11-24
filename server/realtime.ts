@@ -276,7 +276,7 @@ async function runModeration(room: Room, author: string) {
   modRunning.add(key);
   try {
     // drawings far apart are judged separately, so one can't hide beside (or take down) another
-    for (const drawing of splitDrawings(batch.map(s => s.stroke))) {
+    for (const drawing of await splitDrawings(batch.map(s => s.stroke))) {
       const strokes = new Set(drawing);
       // their own earlier strokes count (half now, half later), unless already flagged; nobody else's do
       const own = [...room.strokes.values()].filter(s => s.author === author && !strokes.has(s.stroke) && !held.has(s.stroke.id)).map(s => s.stroke);

@@ -32,7 +32,7 @@ export async function alertProblem(what: string): Promise<void> {
   try {
     const res = await fetch(`${BASE}/${TOPIC}`, {
       method: 'POST',
-      headers: { Title: 'paintaround: some drawings are not being checked', Tags: 'warning' },
+      headers: { Title: 'paintaround.com: some drawings are not being checked', Tags: 'warning' },
       body: plain(what, 300),
       signal: AbortSignal.timeout(20_000),
     });
@@ -57,7 +57,7 @@ export async function alertFlagged(a: Alert): Promise<void> {
     const res = await fetch(`${BASE}/${TOPIC}`, {
       method: 'PUT',
       headers: {
-        Title: plain(`paintaround: ${a.did} (${a.category})`, 120),
+        Title: plain(`paintaround.com: ${a.did} (${a.category})`, 120),
         Message: plain(`${a.place}, ${a.strokes} stroke(s). ${a.reason}${last ? ' (Hourly alert limit reached: no more for up to an hour.)' : ''}`, 500),
         Click: `https://paintaround.com/view?imageId=${encodeURIComponent(a.place)}`,
         Tags: 'art',

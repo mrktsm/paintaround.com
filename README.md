@@ -1,4 +1,4 @@
-# <img src="client/public/favicon.png" alt="" width="40" align="center"> paintaround.com
+# <img src="client/public/favicon.png" alt="" width="40" align="absmiddle"> paintaround.com
 
 [![Build](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=build&label=build&logo=github)](https://github.com/mrktsm/paintaround.com/actions)
 [![Tests](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=tests&label=tests)](https://github.com/mrktsm/paintaround.com/actions)
@@ -33,6 +33,8 @@ like everything around it. [Read more](docs/architecture.md), or see
 [how the 3D data is made](pipeline/3d/README.md).
 
 ![The same view four times: the photo, how far away everything is, the light on it, and paint on it](docs/how-it-works.webp)
+
+<sub>Top: the photo, and how far away everything is. Bottom: the light on it, and paint that follows both.</sub>
 
 ## Tech stack
 

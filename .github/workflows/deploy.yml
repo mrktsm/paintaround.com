@@ -1,4 +1,4 @@
-# CI: type-check + build every push and pull request.
+# CI: lint, type-check, test and build every push and pull request.
 # CD: pushes to master deploy the site and the live-drawing relay to the Oracle server
 #     (same steps as scripts/deploy.sh). Can also be run by hand from the Actions tab.
 #
@@ -25,8 +25,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Type-check app and relay
-        run: npx tsc --noEmit -p tsconfig.app.json && npx tsc --noEmit -p tsconfig.server.json
+        run: npm run typecheck
+      - name: Test the relay and moderation
+        run: npm test
       - name: Build
         run: npm run build
       - uses: actions/upload-artifact@v4

@@ -262,14 +262,18 @@ function scheduleModeration(room: Room, author: string) {
   const key = `${room.id}\n${author}`;
   const now = Date.now();
   if (!modFirst.has(key)) modFirst.set(key, now);
-  const wait = Math.max(1000, Math.min(QUIET_MS, modFirst.get(key)! + MAX_WAIT_MS - now));
+  // (not pushed back further once the longest wait is reached, however fast they draw)
+  const wait = Math.max(0, Math.min(QUIET_MS, modFirst.get(key)! + MAX_WAIT_MS - now));
   clearTimeout(modTimers.get(key));
   modTimers.set(key, setTimeout(() => { modTimers.delete(key); void runModeration(room, author); }, wait));
 }
 
 async function runModeration(room: Room, author: string) {
   const key = `${room.id}\n${author}`;
-  if (modRunning.has(key)) return scheduleModeration(room, author);
+  if (modRunning.has(key)) { // the previous check is still running: look again in a moment
+    modTimers.set(key, setTimeout(() => { modTimers.delete(key); void runModeration(room, author); }, 1000));
+    return;
+  }
   modFirst.delete(key);
   const batch = [...room.strokes.values()].filter(s => s.author === author && s.mod === 'pending');
   if (!batch.length) return;

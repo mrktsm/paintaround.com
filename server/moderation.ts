@@ -18,6 +18,7 @@
  *  6. Errors, blocked answers, a missing key or the hourly cap all mean: the drawing stays (allowed).
  *
  * Env: GEMINI_API_KEY (moderation is off without it), MODERATION=off|log|on (default log),
+ *      GEMINI_URL (tests point it at a stand-in),
  *      MODERATION_MAX_PER_HOUR (default 2000 checks; beyond it drawings are allowed unchecked),
  *      MODERATION_DETAIL=mixed|high (default mixed: full detail on the paint, low on the faded photo;
  *      about as good as high in our tests and a quarter cheaper).
@@ -30,6 +31,7 @@ import { strokeBitmap, strokeOverlays, strokeRect } from './layer.ts';
 const PANO_DIR = process.env.PANO_DIR ?? new URL('../public/panorama-pool/', import.meta.url).pathname;
 const API_KEY = process.env.GEMINI_API_KEY ?? '';
 const MODEL = 'gemini-3.1-flash-lite';
+const API_URL = process.env.GEMINI_URL ?? 'https://generativelanguage.googleapis.com';
 export const MODERATION_ON = !!API_KEY && process.env.MODERATION !== 'off';
 /** only record what would happen; nothing is held or removed */
 export const LOG_ONLY = process.env.MODERATION !== 'on';
@@ -273,7 +275,7 @@ export async function judge(pair: Pair): Promise<Verdict | null> {
     generationConfig: { responseMimeType: 'application/json', responseSchema: GEMINI_SCHEMA, maxOutputTokens: 1024 },
   });
   for (let attempt = 0; ; attempt++) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+    const res = await fetch(`${API_URL}/v1beta/models/${MODEL}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': API_KEY },
       body,

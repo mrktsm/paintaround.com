@@ -122,3 +122,14 @@ test('on a phone one finger paints and two look around', async ({ browser }) => 
   await p.waitForTimeout(800);
   await expect(p.locator('[aria-label="Undo"]')).toBeDisabled();
 });
+
+for (const [name, options] of Object.entries({ desktop: {}, phone: { viewport: { width: 393, height: 780 }, hasTouch: true, isMobile: true } })) {
+  test(`the pens stay where they are when you tab through them (${name})`, async ({ browser }) => {
+    const p = await visit(browser, { alone: true, ...options });
+    const places = () => p.evaluate(() => [...document.querySelectorAll('.pen-btn:not(.active), .color-picker-swatch')].map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y)]; }));
+    const before = await places();
+    for (let k = 0; k < 14; k++) await p.keyboard.press('Tab');
+    await p.waitForTimeout(500);
+    expect(await places()).toEqual(before);
+  });
+}

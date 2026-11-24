@@ -96,6 +96,7 @@ function useScrollFade(ref: RefObject<HTMLElement | null>): string {
     const el = ref.current;
     if (!el) return;
     const update = () => {
+      el.scrollTop = 0; // only sideways (focusing a pen would scroll it up too)
       const left = el.scrollLeft > 2, right = el.scrollWidth - el.clientWidth - el.scrollLeft > 2;
       setFade(!left && !right ? 'none'
         : `linear-gradient(to right, ${left ? 'transparent, black 40px' : 'black calc(100% - 40px)'}${left && right ? ', black calc(100% - 40px)' : ''}${right ? ', transparent' : ''})`);

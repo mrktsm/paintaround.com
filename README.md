@@ -2,8 +2,7 @@
 
 [![Build](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=build&label=build&logo=github)](https://github.com/mrktsm/paintaround.com/actions)
 [![Tests](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=tests&label=tests)](https://github.com/mrktsm/paintaround.com/actions)
-[![Site](https://img.shields.io/website?url=https%3A%2F%2Fpaintaround.com&label=site)](https://paintaround.com)
-[![AGPL-3.0 license](https://img.shields.io/github/license/mrktsm/paintaround.com?label=license)](LICENSE)
+[![MIT license](https://img.shields.io/github/license/mrktsm/paintaround.com?label=license)](LICENSE)
 
 Draw on 360° photos of real places, together with whoever else is there.
 
@@ -76,8 +75,7 @@ npm run test:browser  # the real app in Chrome; needs photos (and 3D data for mo
 
 ## License
 
-The code is under the [GNU AGPL 3.0](LICENSE): if you run a changed version for others, share your
-changes. These are not covered by it:
+The code is under the [MIT license](LICENSE). These are not covered by it:
 
 - The photos, which come from [Poly Haven](https://polyhaven.com) (CC0) and Wikimedia Commons. Each
   one's author and license are in `client/src/data/panorama-pool.json`.

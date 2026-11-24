@@ -35,7 +35,7 @@ export default function Terms() {
 
       <Section n={6} heading="Photos, maps, code and other content">
         <p>The 360° photos, map imagery and other content belong to their owners and are credited in the app with their licenses. Some photos are licensed under Creative Commons Attribution-ShareAlike (CC BY-SA): a drawing made on such a photo is an adaptation of it and is shared under the same license. The satellite map is provided by Esri and its partners. The pencil's paper texture is by David Revoy and is in the public domain (CC0).</p>
-        <p>The code of the Service is open source, under the GNU AGPL 3.0: you can find it <a href={SOURCE_CODE} target="_blank" rel="noreferrer">on GitHub</a>.</p>
+        <p>The code of the Service is open source, under the MIT license: you can find it <a href={SOURCE_CODE} target="_blank" rel="noreferrer">on GitHub</a>.</p>
       </Section>
 
       <Section n={7} heading="Availability">

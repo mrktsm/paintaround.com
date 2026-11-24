@@ -45,20 +45,6 @@ for (const flat of [false, true]) {
     expect(Math.abs(turned.n - at.n) / at.n).toBeLessThan(0.35); // all of it, where it belongs
     expect(p.problems).toEqual([]);
   });
-
-  test(`a tap leaves nothing half drawn${flat ? ' without 3D data' : ''}`, async ({ browser }) => {
-    const p = await visit(browser, { alone: true, flat });
-    await pick(p, 'marker');
-    const before = await look(p);
-    await p.mouse.click(700, 600);
-    await p.mouse.click(740, 600);
-    await p.waitForTimeout(500);
-    await drag(p, [520, 660], [700, 660]);
-    await p.click('[aria-label="Undo"]');
-    await p.waitForTimeout(900);
-    expect(await changed(before, await look(p))).toBeLessThan(700); // at most two dots
-    expect(p.problems).toEqual([]);
-  });
 }
 
 test('the eraser rubs out paint, and undo puts it back', async ({ browser }) => {

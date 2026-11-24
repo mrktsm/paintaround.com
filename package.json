@@ -16,8 +16,8 @@
     "pool:loading-previews": "node scripts/generate-panorama-loading-previews.mjs",
     "paint:materials": "node scripts/generate-paint-materials.mjs",
     "server": "node server/realtime.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json",
-    "test": "node --test 'tests/server/*.test.ts'",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.node.json",
+    "test": "node --test 'tests/{server,unit}/*.test.ts'",
     "test:browser": "playwright test"
   },
   "dependencies": {

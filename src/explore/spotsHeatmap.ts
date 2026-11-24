@@ -1,11 +1,17 @@
 import type { HeatmapLayerSpecification } from 'maplibre-gl';
+import { MAP_LOCATIONS } from '../pool/catalog';
 
-export const HEATMAP_FADE_START = 12.5;
+const HEATMAP_FADE_START = 12.5;
 export const PHOTO_ZOOM = 13.5;
 
-export function photoPinOpacity(zoom: number): number {
-  return Math.max(0, Math.min(1, (zoom - HEATMAP_FADE_START) / (PHOTO_ZOOM - HEATMAP_FADE_START)));
-}
+export const SPOTS = {
+  type: 'FeatureCollection' as const,
+  features: MAP_LOCATIONS.map(l => ({
+    type: 'Feature' as const,
+    properties: { id: l.id },
+    geometry: { type: 'Point' as const, coordinates: [l.lng, l.lat] },
+  })),
+};
 
 export function heatmapRadius(zoom: number): number {
   return 30 + Math.max(0, Math.min(PHOTO_ZOOM, zoom)) * 2.5;

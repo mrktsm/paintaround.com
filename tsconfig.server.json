@@ -15,5 +15,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["server", "shared", "tests/server"]
+  "include": ["server", "shared", "tests/server", "tests/unit", "src/explore/clusters.ts"]
 }

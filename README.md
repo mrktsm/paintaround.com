@@ -1,28 +1,17 @@
-<p align="center">
-  <a href="https://paintaround.com"><img src="client/public/favicon.png" alt="" width="92"></a>
-</p>
+# <img src="client/public/favicon.png" alt="" width="40" align="center"> paintaround.com
 
-<h1 align="center">paintaround.com</h1>
+[![Build](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=build&label=build&logo=github)](https://github.com/mrktsm/paintaround.com/actions)
+[![Tests](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=tests&label=tests)](https://github.com/mrktsm/paintaround.com/actions)
+[![Site](https://img.shields.io/website?url=https%3A%2F%2Fpaintaround.com&label=site)](https://paintaround.com)
+[![AGPL-3.0 license](https://img.shields.io/github/license/mrktsm/paintaround.com?label=license)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/mrktsm/paintaround.com?logo=github)](https://github.com/mrktsm/paintaround.com/stargazers)
 
-<p align="center">
-  Draw on real places in 360°, together, live.<br>
-  <a href="https://paintaround.com"><b>Try it</b></a> · <a href="docs/architecture.md">How it works</a> · <a href="#run-it">Run it</a>
-</p>
+A map of 360° photos you can step into and paint on. Everyone in a place sees everyone else's strokes as
+they're drawn.
 
-<p align="center">
-  <a href="https://github.com/mrktsm/paintaround.com/actions"><img src="https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=build&label=build&logo=github" alt="Build"></a>
-  <a href="https://github.com/mrktsm/paintaround.com/actions"><img src="https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=tests&label=tests" alt="Tests"></a>
-  <a href="https://paintaround.com"><img src="https://img.shields.io/website?url=https%3A%2F%2Fpaintaround.com&label=site" alt="Site"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/mrktsm/paintaround.com?label=license" alt="AGPL-3.0 license"></a>
-  <a href="https://github.com/mrktsm/paintaround.com/stargazers"><img src="https://img.shields.io/github/stars/mrktsm/paintaround.com?logo=github" alt="GitHub stars"></a>
-</p>
+[**Try it live**](https://paintaround.com) · [How it works](#how-it-works) · [Run it](#run-it)
 
-<p align="center">
-  <a href="https://paintaround.com"><img src="docs/cover.webp" alt="The map of places, and painting a fountain in Palermo on a phone" width="900"></a>
-</p>
-
-paintaround.com is a map of 360° photos you can step into and paint on. Everyone in a place sees everyone
-else's strokes as they're drawn.
+[![The map of places, and painting a fountain in Palermo on a phone](docs/cover.webp)](https://paintaround.com)
 
 ## Features
 
@@ -36,16 +25,14 @@ else's strokes as they're drawn.
 - **Moderated:** finished drawings are checked by a vision model, and its mistakes can be undone.
 - **On your phone:** one finger paints, two look around. It installs like an app.
 
-<p align="center">
-  <img src="docs/drawing.webp" alt="Paint running down a fountain and over the pavement" width="900">
-</p>
-
 ## How it works
 
 Each place has a depth map and a lighting map, made once. Where you draw, the surface around your stroke is
 unfolded into a flat sheet, the brush paints on that sheet, and a shader folds it back onto the photo, lit
 like everything around it. [Read more](docs/architecture.md), or see
 [how the 3D data is made](pipeline/3d/README.md).
+
+![The same view four times: the photo, how far away everything is, the light on it, and paint on it](docs/how-it-works.webp)
 
 ## Tech stack
 

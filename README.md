@@ -2,7 +2,7 @@
 
 [![Build](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=build&label=build&logo=github)](https://github.com/mrktsm/paintaround.com/actions)
 [![Tests](https://img.shields.io/github/check-runs/mrktsm/paintaround.com/main?nameFilter=tests&label=tests)](https://github.com/mrktsm/paintaround.com/actions)
-[![MIT license](https://img.shields.io/github/license/mrktsm/paintaround.com?label=license)](LICENSE)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Draw on 360° photos of real places, together with whoever else is there.
 

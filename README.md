@@ -8,7 +8,7 @@ Draw on 360° photos of real places, together with whoever else is there.
 
 [**Try it live**](https://paintaround.com) · [How it works](#how-it-works) · [Run it](#run-it)
 
-[![The map of places, and painting a fountain in Palermo on a phone](docs/cover.webp)](https://paintaround.com)
+[![A wall by the Colosseum painted by several people at once: a mural of clownfish, a tag, scribbles, and three people's cursors](docs/cover.webp)](https://paintaround.com)
 
 ## Features
 
@@ -80,5 +80,3 @@ The code is under the [MIT license](LICENSE). These are not covered by it:
 - The photos, which come from [Poly Haven](https://polyhaven.com) (CC0) and Wikimedia Commons. Each
   one's author and license are in `shared/panorama-pool.json`.
 - The textures in `client/public/textures`, by David Revoy (CC0).
-- The map imagery in the picture above: Esri, Vantor, Earthstar Geographics, TomTom, Garmin, FAO, NOAA, USGS
-  and the GIS User Community, © OpenStreetMap contributors.

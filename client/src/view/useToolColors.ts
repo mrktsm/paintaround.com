@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react';
 import type { ToolType } from './tools';
 
-/** Each tool starts with one of these, at random, until you pick a colour for it. */
-const COLORS = ['#000000', '#FF3B30', '#34C759', '#007AFF', '#FFCC00'];
+/** Each tool starts with one of these bright, saturated colours, at random, until you pick one for it. */
+const COLORS = [
+  '#FF2D95', // hot pink
+  '#39FF14', // neon green
+  '#FF1F1F', // red
+  '#00E5FF', // cyan
+  '#FFE600', // yellow
+  '#FF6A00', // orange
+  '#B026FF', // violet
+  '#1F7BFF', // electric blue
+];
 const TOOLS: ToolType[] = ['pencil', 'marker', 'crayon', 'fountainPen', 'watercolor'];
 const isHexColor = (c: string | null): c is string => !!c && /^#[0-9a-fA-F]{6}$/.test(c);
 

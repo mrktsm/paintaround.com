@@ -8,7 +8,7 @@ Draw on 360° photos of real places, together with whoever else is there.
 
 [**Try it live**](https://paintaround.com) · [How it works](#how-it-works) · [Run it](#run-it)
 
-[![A wall by the Colosseum painted by several people at once: a mural of clownfish, a tag, scribbles, and three people's cursors](docs/cover.webp)](https://paintaround.com)
+[![A wall by the Colosseum painted by several people at once: a mural of clownfish, a tag, scribbles, and three people's cursors; beside it, the map of places on a phone](docs/cover.webp)](https://paintaround.com)
 
 ## Features
 

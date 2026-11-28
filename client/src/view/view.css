@@ -61,7 +61,7 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   inset: 0;
 }
 
-/* Share and Done, top right. Usable even before the place can be drawn on. */
+/* Share and close, top right. Usable even before the place can be drawn on. */
 .view-actions {
   position: absolute;
   top: calc(20px + env(safe-area-inset-top, 0px));
@@ -85,19 +85,10 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
-.view-action.view-close { padding: 0 17px; }
+.view-action.view-share { width: 112px; padding: 0 14px; gap: 8px; }
+.view-action.view-close { width: 40px; padding: 0; border-radius: 50%; }
 .view-action:disabled { opacity: 0.5; cursor: default; }
 @media (hover: hover) { .view-action:not(:disabled):hover { transform: scale(1.04); } }
-.view-copied {
-  position: absolute;
-  top: 48px;
-  right: 0;
-  padding: 9px 13px;
-  border-radius: 16px;
-  font: 500 14px/1 -apple-system, system-ui, sans-serif;
-  white-space: nowrap;
-  pointer-events: none;
-}
 
 /* Reveal the panorama immediately when its image is ready. */
 .viewer-container div[class^="mapillary"] {

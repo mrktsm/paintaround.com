@@ -95,7 +95,10 @@ export function ViewActions({ canShare, onShare, onDone }: { canShare: boolean; 
     <div className="view-actions">
       <button className="view-action view-share" aria-label={copied ? 'Link copied' : 'Share'} title={copied ? 'Link copied' : 'Share'} disabled={!canShare} onClick={onClick} style={GLASS}>
         {copied ? <CheckIcon /> : <ShareIcon />}
-        <span aria-live="polite">{copied ? 'Copied' : 'Share'}</span>
+        <span className="view-share__label">
+          <span className="view-share__measure" aria-hidden="true">Copied</span>
+          <span aria-live="polite">{copied ? 'Copied' : 'Share'}</span>
+        </span>
       </button>
       <button className="view-action view-close" aria-label="Close" title="Close" onClick={onDone} style={GLASS}><CloseIcon /></button>
     </div>

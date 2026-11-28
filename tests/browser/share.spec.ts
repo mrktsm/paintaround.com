@@ -90,12 +90,13 @@ test('where there is a share sheet it opens, with the link; closing it is fine',
   await p.evaluate(() => { (window as unknown as { __fail: string }).__fail = 'AbortError'; });
   await p.click('.view-share');
   await p.waitForTimeout(400);
-  await expect(p.locator('.view-copied')).toHaveCount(0);
+  await expect(p.locator('.view-share')).toHaveText('Share');
   // a sheet that can't open: the link is copied instead
   await p.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await p.evaluate(() => { (window as unknown as { __fail: string }).__fail = 'NotAllowedError'; });
   await p.click('.view-share');
-  await expect(p.locator('.view-copied')).toBeVisible();
+  await expect(p.locator('.view-share')).toHaveText('Copied');
+  await expect(p.locator('.view-share')).toHaveText('Share', { timeout: 3000 });
   expect(p.problems).toEqual([]);
 });
 

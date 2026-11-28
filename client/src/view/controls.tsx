@@ -2,6 +2,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import mouseRightClick from '../assets/mouse-right-click.svg';
 import touchAndScroll from '../assets/touch-and-scroll.svg';
+import CloseIcon from '../components/CloseIcon';
 import type { Panorama } from '../pool/catalog';
 import { DARK_UI } from '../theme';
 
@@ -92,11 +93,11 @@ export function ViewActions({ canShare, onShare, onDone }: { canShare: boolean; 
   const onClick = () => void onShare().then(setCopied, e => console.warn('[share]', e));
   return (
     <div className="view-actions">
-      {copied && <span className="view-copied" role="status" style={GLASS}>Link copied</span>}
-      <button className="view-action view-share" aria-label="Share" title="Share" disabled={!canShare} onClick={onClick} style={GLASS}>
+      <button className="view-action view-share" aria-label={copied ? 'Link copied' : 'Share'} title={copied ? 'Link copied' : 'Share'} disabled={!canShare} onClick={onClick} style={GLASS}>
         {copied ? <CheckIcon /> : <ShareIcon />}
+        <span aria-live="polite">{copied ? 'Copied' : 'Share'}</span>
       </button>
-      <button className="view-action view-close" onClick={onDone} style={GLASS}>Done</button>
+      <button className="view-action view-close" aria-label="Close" title="Close" onClick={onDone} style={GLASS}><CloseIcon /></button>
     </div>
   );
 }

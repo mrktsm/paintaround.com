@@ -85,7 +85,10 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
-.view-action.view-share { width: 112px; padding: 0 14px; gap: 8px; }
+.view-action.view-share { padding: 0 12px; gap: 6px; }
+.view-share__label { display: grid; white-space: nowrap; }
+.view-share__label > span { grid-area: 1 / 1; }
+.view-share__measure { visibility: hidden; }
 .view-action.view-close { width: 40px; padding: 0; border-radius: 50%; }
 .view-action:disabled { opacity: 0.5; cursor: default; }
 @media (hover: hover) { .view-action:not(:disabled):hover { transform: scale(1.04); } }

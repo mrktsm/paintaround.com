@@ -316,6 +316,16 @@ html.short-screen .loading-overlay { position: absolute; bottom: auto; height: v
   flex-shrink: 0;
 }
 
+/* The pen pictures are wider than their 30px buttons: without this their edges and the gaps between
+   pens weren't clickable (a click there drew on the photo instead) and hover kept dropping and
+   coming back while the mouse moved across them (the pens jumped). Each pen's hit area now fills
+   its whole slot: half the 14px gap on each side, so neighbours meet with nothing in between. */
+.pen-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0 -7px;
+}
+
 @media (hover: hover) {
   .pen-btn:hover {
     transform: translateY(63px);

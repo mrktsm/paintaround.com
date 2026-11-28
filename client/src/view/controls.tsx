@@ -71,15 +71,15 @@ const GLASS: CSSProperties = {
 /** Apple's share symbol: a box with an arrow out of its top. */
 function ShareIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 14.5V2.8M7.8 6.6 12 2.5l4.2 4.1" />
-      <path d="M8 9.8H6.6a2 2 0 0 0-2 2v7.7a2 2 0 0 0 2 2h10.8a2 2 0 0 0 2-2v-7.7a2 2 0 0 0-2-2H16" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 14V3M8.5 6.5 12 3l3.5 3.5" />
+      <path d="M8 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2" />
     </svg>
   );
 }
 
 function CheckIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 }
 
 /** Share what you're looking at, and leave. `onShare` says whether the link was copied. */
@@ -94,9 +94,9 @@ export function ViewActions({ canShare, onShare, onDone }: { canShare: boolean; 
   return (
     <div className="view-actions">
       <button className="view-action view-share" aria-label={copied ? 'Link copied' : 'Share'} title={copied ? 'Link copied' : 'Share'} disabled={!canShare} onClick={onClick} style={GLASS}>
-        {copied ? <CheckIcon /> : <ShareIcon />}
-        <span className="view-share__label">
-          <span className="view-share__measure" aria-hidden="true">Copied</span>
+        <span className="view-share__content view-share__measure" aria-hidden="true"><CheckIcon /><span>Copied</span></span>
+        <span className="view-share__content">
+          {copied ? <CheckIcon /> : <ShareIcon />}
           <span aria-live="polite">{copied ? 'Copied' : 'Share'}</span>
         </span>
       </button>
